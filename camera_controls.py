@@ -1,7 +1,8 @@
+import atexit
 from random import choice
 from time import sleep
 
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, QThread
 from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, QPushButton, QComboBox
 
 from message_dialog import info_message
@@ -27,11 +28,11 @@ class CameraControlsGroup(QGroupBox):
 
         # Buttons
         self.live_on_button = QPushButton("LIVE ON")
-        self.live_on_button.clicked.connect(self.live_on)
+        self.live_on_button.clicked.connect(self.live_on_func)
 
         self.live_off_button = QPushButton("LIVE OFF")
         self.live_off_button.setEnabled(False)
-        self.live_off_button.clicked.connect(self.live_off)
+        self.live_off_button.clicked.connect(self.live_off_func)
 
         self.save_one_image_button = QPushButton("SAVE 1 image")
         self.save_one_image_button.clicked.connect(self.save_one_image)
@@ -46,22 +47,52 @@ class CameraControlsGroup(QGroupBox):
         # Camera object
         self.camera = camera
         self.viewer = viewer
-
+        self.live_on = False
 
         # EXPOSURE
         self.exposure_label = QLabel()
-        self.exposure_label.setText("EXPOSURE")
+        self.exposure_label.setText("EXPOSURE [msec]")
         self.exposure_entry = QLineEdit()
         self.exposure_units = QLabel()
         self.exposure_units.setText("msec")
 
         # DELAY
         self.delay_label = QLabel()
-        self.delay_label.setText("DELAY")
+        self.delay_label.setText("DELAY [msec]")
         self.delay_entry = QLineEdit()
         self.delay_entry.setText("0")
         self.delay_units = QLabel()
         self.delay_units.setText("msec")
+
+        # ROI
+        # y0
+        self.roi_y0_label = QLabel()
+        self.roi_y0_label.setText("ROI first line")
+        self.roi_y0_entry = QLineEdit()
+        self.roi_y0_entry.setText("0")
+        # height
+        self.roi_height_label = QLabel()
+        self.roi_height_label.setText("ROI height, lines")
+        self.roi_height_entry = QLineEdit()
+        # x0
+        self.roi_x0_label = QLabel()
+        self.roi_x0_label.setText("ROI first column")
+        self.roi_x0_entry = QLineEdit()
+        self.roi_x0_entry.setText("0")
+        # width
+        self.roi_width_label = QLabel()
+        self.roi_width_label.setText("ROI width, columns")
+        self.roi_width_entry = QLineEdit()
+        #sensor_vertical_binning
+        self.sensor_ver_bin_label = QLabel()
+        self.sensor_ver_bin_label.setText("Vertical binning")
+        self.sensor_ver_bin_entry = QLineEdit()
+        self.sensor_ver_bin_entry.setText("1")
+        #sensor_horizontal_binning
+        self.sensor_hor_bin_label = QLabel()
+        self.sensor_hor_bin_label.setText("Horizontal binning")
+        self.sensor_hor_bin_entry = QLineEdit()
+        self.sensor_hor_bin_entry.setText("1")
 
         # BUFFERED
         self.buffered_label = QLabel()
@@ -92,6 +123,15 @@ class CameraControlsGroup(QGroupBox):
         self.acq_mode_entry = QComboBox()
         self.acq_mode_entry.addItems(["AUTO", "EXT"])
 
+        # PIXELRATE line 6
+        self.sensor_pix_rate_label = QLabel()
+        self.sensor_pix_rate_label.setText("SENSOR PIXEL RATE, MHz")
+        self.sensor_pix_rate_entry = QComboBox()
+
+        # Thread for live preview
+        self.live_preview_thread = LivePreviewThread(viewer=self.viewer, camera=self.camera)
+        self.live_preview_thread.start()
+
         self.set_layout()
 
     def set_layout(self):
@@ -108,11 +148,11 @@ class CameraControlsGroup(QGroupBox):
 
         layout.addWidget(self.exposure_label, 2, 0)
         layout.addWidget(self.exposure_entry, 2, 1)
-        layout.addWidget(self.exposure_units, 2, 2)
+        #layout.addWidget(self.exposure_units, 2, 2)
 
         layout.addWidget(self.delay_label, 3, 0)
         layout.addWidget(self.delay_entry, 3, 1)
-        layout.addWidget(self.delay_units, 3, 2)
+        #layout.addWidget(self.delay_units, 3, 2)
 
         # Right column of controls
         layout.addWidget(self.buffered_label, 1, 4)
@@ -130,8 +170,25 @@ class CameraControlsGroup(QGroupBox):
         layout.addWidget(self.acq_mode_label, 5, 4)
         layout.addWidget(self.acq_mode_entry, 5, 5)
 
+        layout.addWidget(self.sensor_pix_rate_label, 6, 4)
+        layout.addWidget(self.sensor_pix_rate_entry, 6, 5)
+
         for column in range(6):
             layout.setColumnStretch(column, 1)
+
+        # ROI/bin group
+        layout.addWidget(self.roi_y0_label, 4, 0)
+        layout.addWidget(self.roi_y0_entry, 4, 1)
+        layout.addWidget(self.roi_height_label, 5, 0)
+        layout.addWidget(self.roi_height_entry, 5, 1)
+        layout.addWidget(self.sensor_ver_bin_label, 6, 0)
+        layout.addWidget(self.sensor_ver_bin_entry, 6, 1)
+        layout.addWidget(self.roi_x0_label, 4, 2)
+        layout.addWidget(self.roi_x0_entry, 4, 3)
+        layout.addWidget(self.roi_width_label, 5, 2)
+        layout.addWidget(self.roi_width_entry, 5, 3)
+        layout.addWidget(self.sensor_hor_bin_label, 6, 2)
+        layout.addWidget(self.sensor_hor_bin_entry, 6, 3)
 
         self.setLayout(layout)
 
@@ -187,16 +244,17 @@ class CameraControlsGroup(QGroupBox):
         """
         self.connect_to_camera_status.setText("CONNECTED")
         self.connect_to_camera_status.setStyleSheet("color: green")
+        # identify model
         if self.camera.sensor_width.magnitude == 2000:
             self.camera_model_label.setText("PCO Dimax")
             self.buffer_location_entry.addItems(["ON-BOARD"])
+        if self.camera.sensor_width.magnitude == 4008:
+            self.camera_model_label.setText("PCO 4000")
+        # set default values
         self.exposure_entry.setText("{}".format(self.camera.exposure_time.magnitude*1000))
-
-        # sensor_height
-        # roi_height
-        # roi_width
-        # roi_x0
-        # roi_y0
+        self.roi_height_entry.setText("{}".format(self.camera.sensor_height.magnitude))
+        self.roi_width_entry.setText("{}".format(self.camera.sensor_width.magnitude))
+        self.sensor_pix_rate_entry.addItems([str(int(i/1e6)) for i in self.camera.sensor_pixelrates])
 
     def on_camera_connect_failure(self):
         """
@@ -209,7 +267,7 @@ class CameraControlsGroup(QGroupBox):
         self.camera = None
         self.camera_model_label.setText("")
 
-    def live_on(self):
+    def live_on_func(self):
         #info_message("Live mode ON")
         self.live_on_button.setEnabled(False)
         self.live_off_button.setEnabled(True)
@@ -218,14 +276,20 @@ class CameraControlsGroup(QGroupBox):
         if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
             self.camera.trigger_source = self.camera.trigger_sources.AUTO
         self.camera.start_recording()
-        self.viewer(self.camera.grab())
-        #self.camera.stream(self.viewer())
-        #plt.plot(range(40))
-        #plt.show()
+        self.live_preview_thread.camera = self.camera
+        self.live_preview_thread.live_on = True
+        # self.live_on = True
+        # while self.live_on:
+        #     self.viewer.show(self.camera.grab())
+        #     sleep(0.05)
+        # self.camera.stream(self.viewer())
+        # plt.plot(range(40))
+        # plt.show()
 
 
-    def live_off(self):
+    def live_off_func(self):
         #info_message("Live mode OFF")
+        self.live_preview_thread.live_on = False
         self.live_off_button.setEnabled(False)
         self.live_on_button.setEnabled(True)
         self.camera.stop_recording()
@@ -239,5 +303,55 @@ class CameraControlsGroup(QGroupBox):
         self.save_one_image_button.setEnabled(True)
         info_message("Image saved!")
 
+    #getters/setters
+    @property
+    def exp_time(self):
+        try:
+            return int(self.exposure_entry.text())
+        except ValueError:
+            return None
+
+    # does not seem to work right, I'm abandoning this approach
+    # @exp_time.setter
+    # def exp_time(self, value):
+    #     self.exposure_entry.setText("{}".format(value))
+
+    @property
+    def roi_height(self):
+        try:
+            return int(self.roi_height_entry.text())
+        except ValueError:
+            return None
 
 
+class LivePreviewThread(QThread):
+    def __init__(self, viewer, camera, *args, **kwargs):
+        super(LivePreviewThread, self).__init__(*args, **kwargs)
+        self.viewer = viewer
+        self.camera = camera
+        self.thread_running = True
+        self.live_on = False
+        atexit.register(self.stop)
+
+    def stop(self):
+        self.thread_running = False
+        self.wait()
+
+    def run(self):
+        while self.thread_running:
+            if self.live_on:
+                self.viewer.show(self.camera.grab())
+                sleep(0.05)
+            else:
+                sleep(1)
+
+# import time
+# import numpy as np
+#
+# def test(nframes):
+#     t1 = time.time()
+#         for i in range(nframes):
+#         camera.trigger()
+#         print np.std(camera.grab())
+#     t2 = time.time()
+#     return t2-t1

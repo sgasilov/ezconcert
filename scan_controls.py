@@ -26,10 +26,12 @@ class ScanControlsGroup(QGroupBox):
     Camera controls
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, get_all_parameters, *args, **kwargs):
         super(ScanControlsGroup, self).__init__(*args, **kwargs)
         # Timer - just as example
         self.timer = QTimer()
+
+        self.get_all_parameters = get_all_parameters
 
         # Buttons
         self.start_button = QPushButton("START")
@@ -140,6 +142,7 @@ class ScanControlsGroup(QGroupBox):
         return True
 
     def start(self):
+        exp_time, root_dir = self.get_all_params()
         if not self.check_parameters():
             error_message("Parameters check failed")
             return
