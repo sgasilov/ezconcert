@@ -116,21 +116,23 @@ class Radiography(Experiment):
         self.num_darks = num_darks
         self.num_flats = num_flats
         self.radio_producer = radio_producer
-
         # acquititions
         flats = Acquisition('flats', self.take_flats)
         acquisitions = [flats]
-        # if darks
-            # acquisitions.append(darks)
+        #if darks_chackbox
+        #    acquisitions.append(darks)
         #if flat_before:
             #acquisitions.append(flats)
         super(Radiography, self).__init__(acquisitions, walker=walker,
                                           separate_scans=separate_scans)
 
     def take_flats(self):
-        for i in range(self.num_flats):
-            info_message("Image {}".format(i))
-            yield self.camera.grab()
+
+        for i in range(5):
+            #yield self.camera.grab()
+            sleep(5)
+            #info_message("Image std {:0.2f}".format(np.std(self.camera.grab())))
+            #yield self.camera.grab()
 
 @coroutine
 def mystd():

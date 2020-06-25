@@ -31,14 +31,14 @@ class RingStatusGroup(QGroupBox):
         self.ringstatus_spacer = QLabel()
         self.ringstatus_label = QLabel()
         self.ringstatus_label.setText("Ring state")
-        self.ringstatus_entry = QLineEdit()
+        self.ringstatus_entry = QLabel()
         self.ringstatus_entry.setFixedWidth(50)
 
         # injection in
         self.inj_countdown_spacer = QLabel()
         self.inj_countdown_label = QLabel()
         self.inj_countdown_label.setText("Injection in [sec]")
-        self.inj_countdown_entry = QLineEdit()
+        self.inj_countdown_entry = QLabel()
         self.inj_countdown_entry.setFixedWidth(50)
 
         self.set_layout()

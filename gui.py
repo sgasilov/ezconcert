@@ -17,6 +17,8 @@ from concert.experiments.addons import ImageWriter
 from concert.experiments.addons import Consumer
 from message_dialog import info_message, error_message
 from scans_concert import ConcertScanThread, Radiography, FFC, test
+from concert.session.utils import abort
+from concert.coroutines.base import coroutine, inject
 # Adam's interface EPICS-Concert interface
 from edc.motor import CLSLinear, ABRS, CLSAngle
 from edc.shutter import CLSShutter
@@ -36,11 +38,15 @@ class GUI(QDialog):
         self.setWindowTitle('BMIT GUI')
 
         # (1) Physical devices
+        # references to those used in scan
         self.camera = None
         self.motor_inner = None
         self.motor_outer = None
         self.motor_flat = None
         self.shutter = None
+        # Dictionary of all physical devices
+        # we will also create instances of devices right away
+        #self.lin_mot_list = {"CT [deg]":, "Time [sec]", "ACry [urad]", "Horizontal [mm]": "SMTR1605-2-B10-11:mm" }
         # (2) Concert objects
         self.viewer = PyplotImageViewer()
         # class which manipulates flat-field motor and shutters
@@ -124,29 +130,46 @@ class GUI(QDialog):
 
     def start(self):
         info_message("Scan started")
+        #self.walker = DirectoryWalker(root=self.file_writer_group.root_dir, \
+        #                              dsetname=self.file_writer_group.dsetname)
+        #try:
+        #for i in n_retries:
+        # try:
+        #    sam_hor = CLSLinear(self.lin_mot_list[self.scan_controls_group.inner_loop_motor.Text()], encoded=True)
+        # except:
+        #    pass
+        # except:
+        #    error_message("Cannot connect to motor")
+
         self.setup = FFC(self.shutter, self.motor_flat, \
                            self.ffc_controls_group.flat_position, self.ffc_controls_group.radio_position)
 
-        #self.walker = DirectoryWalker(root=exp_root_dir, dsetname=frame_fmt)
-        #self.writer = ImageWriter(ex.acquisitions, walker, async=True)
-        self.scan = Radiography(self.camera, self.setup, self.walker, \
-                                self.ffc_controls_group.num_flats, self.ffc_controls_group.num_darks)
-        #live = Consumer(self.scan.acquisitions, self.viewer)
+        self.scan = Radiography(self.camera, self.setup, \
+                                num_darks=self.ffc_controls_group.num_darks,
+                                num_flats=self.ffc_controls_group.num_flats)
 
-        info_message("Image std {:0.2f}".format(np.std(self.camera.grab())))
+        # Connecting writer and live-preview
+        #self.writer = ImageWriter(self.scan.acquisitions, self.walker, async=True)
+        live = Consumer(self.scan.acquisitions, self.viewer())
+
+        #info_message("Image std {:0.2f}".format(np.std(self.camera.grab())))
         #test(self.camera)
 
         self.start_button.setEnabled(False)
         self.abort_button.setEnabled(True)
         self.return_button.setEnabled(False)
         #info_message("Scan ON")
-        #self.f = self.scan.run()
-        #self.scan_status_update_timer.start()
-
+        self.f = self.scan.run()
+        self.scan_status_update_timer.start()
         #self.scan_thread.scan_running = True
         #info_message("Scan finished")
 
-
+    @coroutine
+    def mystd(self):
+        while True:
+            im = yield
+            info_message("Image std {:0.2f}".format(np.std(im)))
+            # print "STD {:0.2f}".format(np.std(im))
 
     def abort(self):
         # calls global Concert abort() command
