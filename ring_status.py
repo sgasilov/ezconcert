@@ -18,13 +18,28 @@ class RingStatusGroup(QGroupBox):
         super(RingStatusGroup, self).__init__(*args, **kwargs)
         self.timer = QTimer()
 
+        # Ring current
         self.ringcurrent_label = QLabel()
         self.ringcurrent_label.setText("Ring current [mA]")
-        self.ringcurrent_entry = QLineEdit()
+        #self.ringcurrent_entry = QLineEdit()
+        self.ringcurrent_entry = QLabel()
         self.ringcurrent_entry.setFixedWidth(50)
-
         self.epics_monitor = EpicsMonitor()
         self.epics_monitor.i0_state_changed_signal.connect(self.ringcurrent_entry.setText)
+
+        # Ring status
+        self.ringstatus_spacer = QLabel()
+        self.ringstatus_label = QLabel()
+        self.ringstatus_label.setText("Ring state")
+        self.ringstatus_entry = QLineEdit()
+        self.ringstatus_entry.setFixedWidth(50)
+
+        # injection in
+        self.inj_countdown_spacer = QLabel()
+        self.inj_countdown_label = QLabel()
+        self.inj_countdown_label.setText("Injection in [sec]")
+        self.inj_countdown_entry = QLineEdit()
+        self.inj_countdown_entry.setFixedWidth(50)
 
         self.set_layout()
 
@@ -34,6 +49,15 @@ class RingStatusGroup(QGroupBox):
         # Buttons on top
         layout.addWidget(self.ringcurrent_label, 0, 0)
         layout.addWidget(self.ringcurrent_entry, 0, 1)
+
+        layout.addWidget(self.ringstatus_spacer, 0, 2)
+        layout.addWidget(self.ringstatus_label, 0, 3)
+        layout.addWidget(self.ringstatus_entry, 0, 4)
+
+        layout.addWidget(self.inj_countdown_spacer, 0, 5)
+        layout.addWidget(self.inj_countdown_label, 0, 6)
+        layout.addWidget(self.inj_countdown_entry, 0, 7)
+
         self.setLayout(layout)
 
 
@@ -51,4 +75,4 @@ class EpicsMonitor(QObject):
         :param kwargs: the rest of arguments
         :return: None
         """
-        self.i0_state_changed_signal.emit("{:.3f}".format(value))
+        self.i0_state_changed_signal.emit("{:.1f}".format(value))

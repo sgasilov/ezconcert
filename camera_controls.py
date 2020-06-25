@@ -2,12 +2,13 @@ import atexit
 from random import choice
 from time import sleep
 
-from PyQt5.QtCore import QTimer, QThread
+from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject
 from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, QPushButton, QComboBox
 
-from message_dialog import info_message
+from message_dialog import info_message, error_message, warning_message
 
 from concert.devices.cameras.uca import Camera as UcaCamera
+from concert.devices.cameras.dummy import Camera as DummyCamera
 from matplotlib import pyplot as plt
 from concert.devices.cameras.base import CameraError
 
@@ -20,32 +21,39 @@ class CameraControlsGroup(QGroupBox):
     """
     Camera controls
     """
+    camera_connected_signal = pyqtSignal(object)
 
-    def __init__(self, camera, viewer, *args, **kwargs):
+    def __init__(self, viewer, *args, **kwargs):
         # Timer - just as example
         super(CameraControlsGroup, self).__init__(*args, **kwargs)
         self.timer = QTimer()
+        self.camera = None
 
         # Buttons
         self.live_on_button = QPushButton("LIVE ON")
         self.live_on_button.clicked.connect(self.live_on_func)
+        self.live_on_button.setEnabled(False)
 
         self.live_off_button = QPushButton("LIVE OFF")
         self.live_off_button.setEnabled(False)
         self.live_off_button.clicked.connect(self.live_off_func)
+        self.live_off_button.setEnabled(False)
 
         self.save_one_image_button = QPushButton("SAVE 1 image")
         self.save_one_image_button.clicked.connect(self.save_one_image)
+        self.save_one_image_button.setEnabled(False)
 
         # Connect to camera
         self.connect_to_camera_button = QPushButton("Connect to camera")
-        self.connect_to_camera_button.clicked.connect(self.connect_to_camera)  # No brackets required here!
+        self.connect_to_camera_button.clicked.connect(self.connect_to_camera)
+        self.connect_to_dummy_camera_button = QPushButton("Connect to dummy camera")
+        self.connect_to_dummy_camera_button.clicked.connect(self.connect_to_dummy_camera)
         self.connect_to_camera_status = QLabel()
         self.connect_to_camera_status.setText("NOT CONNECTED")
         self.connect_to_camera_status.setStyleSheet("color: red")
         self.camera_model_label = QLabel()
         # Camera object
-        self.camera = camera
+        self.camera = None
         self.viewer = viewer
         self.live_on = False
 
@@ -69,7 +77,6 @@ class CameraControlsGroup(QGroupBox):
         self.roi_y0_label = QLabel()
         self.roi_y0_label.setText("ROI first line")
         self.roi_y0_entry = QLineEdit()
-        self.roi_y0_entry.setText("0")
         # height
         self.roi_height_label = QLabel()
         self.roi_height_label.setText("ROI height, lines")
@@ -78,7 +85,7 @@ class CameraControlsGroup(QGroupBox):
         self.roi_x0_label = QLabel()
         self.roi_x0_label.setText("ROI first column")
         self.roi_x0_entry = QLineEdit()
-        self.roi_x0_entry.setText("0")
+
         # width
         self.roi_width_label = QLabel()
         self.roi_width_label.setText("ROI width, columns")
@@ -145,6 +152,7 @@ class CameraControlsGroup(QGroupBox):
         layout.addWidget(self.connect_to_camera_button, 1, 0)
         layout.addWidget(self.connect_to_camera_status, 1, 1)
         layout.addWidget(self.camera_model_label, 1, 2)
+        layout.addWidget(self.connect_to_dummy_camera_button, 1, 3)
 
         layout.addWidget(self.exposure_label, 2, 0)
         layout.addWidget(self.exposure_entry, 2, 1)
@@ -220,7 +228,7 @@ class CameraControlsGroup(QGroupBox):
     def acq_mode(self):
         return self.acq_mode_entry.currentText()
 
-    def connect_to_camera(self, camera):
+    def connect_to_camera(self):
         """
         TODO: call you function connecting to camera
         :return: None
@@ -235,6 +243,22 @@ class CameraControlsGroup(QGroupBox):
 
         if self.camera is not None:
             self.on_camera_connect_success()
+
+    def connect_to_dummy_camera(self):
+        self.camera = DummyCamera()
+        self.connect_to_camera_status.setText("CONNECTED")
+        self.connect_to_camera_status.setStyleSheet("color: orange")
+        self.camera_model_label.setText("Dummy camera")
+        self.exposure_entry.setText("{}".format(self.camera.exposure_time.magnitude * 1000))
+        self.roi_height_entry.setText("{}".format(self.camera.roi_height.magnitude))
+        self.roi_width_entry.setText("{}".format(self.camera.roi_width.magnitude))
+        self.roi_y0_entry.setText("{}".format(self.camera.roi_y0.magnitude))
+        self.roi_x0_entry.setText("{}".format(self.camera.roi_x0.magnitude))
+        self.live_preview_thread.camera = self.camera
+        self.camera_connected_signal.emit(self.camera)
+        self.live_on_button.setEnabled(True)
+        self.live_off_button.setEnabled(True)
+        self.save_one_image_button.setEnabled(True)
 
     def on_camera_connect_success(self):
         """
@@ -252,9 +276,18 @@ class CameraControlsGroup(QGroupBox):
             self.camera_model_label.setText("PCO 4000")
         # set default values
         self.exposure_entry.setText("{}".format(self.camera.exposure_time.magnitude*1000))
-        self.roi_height_entry.setText("{}".format(self.camera.sensor_height.magnitude))
-        self.roi_width_entry.setText("{}".format(self.camera.sensor_width.magnitude))
+        self.roi_height_entry.setText("{}".format(self.camera.roi_height.magnitude))
+        self.roi_height_label.setText("ROI height, lines (max. {})".format(self.camera.sensor_height.magnitude))
+        self.roi_width_entry.setText("{}".format(self.camera.roi_width.magnitude))
+        self.roi_width_label.setText("ROI width, columns (max. {})".format(self.camera.sensor_width.magnitude))
+        self.roi_y0_entry.setText("{}".format(self.camera.roi_y0.magnitude))
+        self.roi_x0_entry.setText("{}".format(self.camera.roi_x0.magnitude))
         self.sensor_pix_rate_entry.addItems([str(int(i/1e6)) for i in self.camera.sensor_pixelrates])
+        self.live_preview_thread.camera = self.camera
+        self.camera_connected_signal.emit(self.camera)
+        self.live_on_button.setEnabled(True)
+        self.live_off_button.setEnabled(True)
+        self.save_one_image_button.setEnabled(True)
 
     def on_camera_connect_failure(self):
         """
@@ -271,28 +304,27 @@ class CameraControlsGroup(QGroupBox):
         #info_message("Live mode ON")
         self.live_on_button.setEnabled(False)
         self.live_off_button.setEnabled(True)
-        if self.camera.acquire_mode != self.camera.uca.enum_values.acquire_mode.AUTO:
-            self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
-        if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
-            self.camera.trigger_source = self.camera.trigger_sources.AUTO
-        self.camera.start_recording()
-        self.live_preview_thread.camera = self.camera
+        try:
+            if self.camera.acquire_mode != self.camera.uca.enum_values.acquire_mode.AUTO:
+                self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
+            if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
+                self.camera.trigger_source = self.camera.trigger_sources.AUTO
+            self.camera.start_recording()
+        except:
+            if self.camera_model_label.text() != 'Dummy camera':
+                error_message("Cannot change acquisition mode and trigger source")
         self.live_preview_thread.live_on = True
-        # self.live_on = True
-        # while self.live_on:
-        #     self.viewer.show(self.camera.grab())
-        #     sleep(0.05)
-        # self.camera.stream(self.viewer())
-        # plt.plot(range(40))
-        # plt.show()
-
 
     def live_off_func(self):
         #info_message("Live mode OFF")
         self.live_preview_thread.live_on = False
         self.live_off_button.setEnabled(False)
         self.live_on_button.setEnabled(True)
-        self.camera.stop_recording()
+        try:
+            self.camera.stop_recording()
+        except:
+            if self.camera_model_label.text() != 'Dummy camera':
+                error_message("Cannot stop recording")
 
     def save_one_image(self):
         self.save_one_image_button.setEnabled(False)
@@ -311,11 +343,6 @@ class CameraControlsGroup(QGroupBox):
         except ValueError:
             return None
 
-    # does not seem to work right, I'm abandoning this approach
-    # @exp_time.setter
-    # def exp_time(self, value):
-    #     self.exposure_entry.setText("{}".format(value))
-
     @property
     def roi_height(self):
         try:
@@ -325,8 +352,8 @@ class CameraControlsGroup(QGroupBox):
 
 
 class LivePreviewThread(QThread):
-    def __init__(self, viewer, camera, *args, **kwargs):
-        super(LivePreviewThread, self).__init__(*args, **kwargs)
+    def __init__(self, viewer, camera):
+        super(LivePreviewThread, self).__init__()
         self.viewer = viewer
         self.camera = camera
         self.thread_running = True
@@ -344,6 +371,16 @@ class LivePreviewThread(QThread):
                 sleep(0.05)
             else:
                 sleep(1)
+
+# class CameraMonitor(QObject):
+#     camera_connected_signal = pyqtSignal(object)
+#
+#     def __init__(self):
+#         super(CameraMonitor, self).__init__()
+#         self.camera = PV(I0_PV, callback=self.on_camera_state_changed)
+#
+#     def on_camera_state_changed(self, camera, **kwargs ):
+#         self.camera_connected_signal.emit(camera)
 
 # import time
 # import numpy as np

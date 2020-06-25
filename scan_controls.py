@@ -5,7 +5,8 @@ from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, QPushButton, QComboBox, QCheckBox
 
 from message_dialog import info_message, error_message
-
+from scans_concert import ConcertScanThread
+import epics
 
 def scan_dummy():
     sleep(10)
@@ -26,23 +27,24 @@ class ScanControlsGroup(QGroupBox):
     Camera controls
     """
 
-    def __init__(self, get_all_parameters, *args, **kwargs):
+    def __init__(self, start_button, abort_button, return_button, scan_fps_entry,
+                 motor_inner, motor_outer, *args, **kwargs):
         super(ScanControlsGroup, self).__init__(*args, **kwargs)
         # Timer - just as example
         self.timer = QTimer()
 
-        self.get_all_parameters = get_all_parameters
+        # physical devices
+        self.motor_inner = motor_inner
+        self.motor_outer = motor_outer
 
         # Buttons
-        self.start_button = QPushButton("START")
-        self.start_button.clicked.connect(self.start)
-
-        self.abort_button = QPushButton("ABORT")
-        self.abort_button.setEnabled(False)
-        self.abort_button.clicked.connect(self.abort)
-
-        self.return_button = QPushButton("RETURN")
-        self.return_button.clicked.connect(self.return_to_position)
+        self.start_button = start_button
+        self.abort_button = abort_button
+        self.return_button = return_button
+        # FPS indicator
+        self.scan_fps_label = QLabel()
+        self.scan_fps_label.setText("Average fps")
+        self.scan_fps_entry = scan_fps_entry
 
         # "Table headers"
         self.motor_label = QLabel()
@@ -126,8 +128,12 @@ class ScanControlsGroup(QGroupBox):
 
         self.setLayout(layout)
 
+    @property
     def inner_loop_steps(self):
-        return int(self.inner_loop_steps_entry.text())
+        try:
+            return int(self.inner_loop_steps_entry.text())
+        except ValueError:
+            return None
 
     def outer_loop_steps(self):
         return int(self.outer_loop_steps_entry.text())
@@ -141,29 +147,5 @@ class ScanControlsGroup(QGroupBox):
             return False
         return True
 
-    def start(self):
-        exp_time, root_dir = self.get_all_params()
-        if not self.check_parameters():
-            error_message("Parameters check failed")
-            return
 
-        self.start_button.setEnabled(False)
-        self.abort_button.setEnabled(True)
-        self.return_button.setEnabled(False)
-        info_message("Scan ON")
-        # call scan command instead
-        result = scan_dummy()
-        info_message(result)
 
-    def abort(self):
-        # call abort command instead
-        abort_dummy()
-        info_message("Scan OFF")
-        self.start_button.setEnabled(True)
-        self.abort_button.setEnabled(False)
-        self.return_button.setEnabled(True)
-
-    def return_to_position(self):
-        info_message("Returning to position...")
-        result = return_to_position_dummy()
-        info_message(result)
