@@ -15,12 +15,20 @@ from concert.experiments.imaging import (tomo_projections_number, tomo_max_speed
 from concert.devices.cameras.base import CameraError
 from concert.devices.cameras.pco import Timestamp
 from concert.devices.cameras.uca import Camera as UcaCamera
-from PyQt5.QtCore import QTimer, QThread, pyqtSignal
+from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject
 from concert.coroutines.base import coroutine, inject
+from concert.experiments.addons import Consumer
 from message_dialog import info_message
 import numpy as np
 
+
+def run(n, callback):
+    for i in range(n):
+        callback(i)
+        sleep(0.5)
+
 class ConcertScanThread(QThread):
+#class ConcertScanThread(QObject):
     """
     Creates Concert Experiment
     from Concert Acqusitions
@@ -29,32 +37,82 @@ class ConcertScanThread(QThread):
     Parameters of Camera must be defined before calling Scan
     """
     scan_finished_signal = pyqtSignal()
+    data_changed_signal = pyqtSignal(str)
 
     def __init__(self, viewer, camera, flat_motor=None, inner_motor=None):
         super(ConcertScanThread, self).__init__()
         self.viewer = viewer
         self.camera = camera
+        self.ffcsetup = FFCsetup()
         self.thread_running = True
         atexit.register(self.stop)
         self.scan_running = False
+        self.exp = Radiography(self.camera, self.ffcsetup)#, callback=self.on_data_changed)
+        self.cons = Consumer(self.exp.acquisitions, self.on_data_changed())
+        #inject((camera.grab() for i in range(10)), self.on_data_changed())
 
     def stop(self):
         self.thread_running = False
         self.wait()
 
-    def run(self):
+    def run(self): # .start() calls this function
         while self.thread_running:
             if self.scan_running:
-                # emit result of future = Experiment.run().join()
-                self.scan_running = False
-                #self.viewer.show(self.camera.grab())
-                #sleep(0.05)
+                #inject((self.camera.grab() for i in range(10)), self.on_data_changed())
+                self.exp.run()
+                #run(10, callback=self.on_data_changed)
                 self.scan_finished_signal.emit()
             else:
                 sleep(1)
 
+    # def on_data_changed(self, value, **kwargs):
+    #     self.data_changed_signal.emit("{}".format(value))
 
-class FFC(object):
+    @coroutine
+    def on_data_changed(self):
+        while True:
+            im = yield
+            self.data_changed_signal.emit("{:0.3f}".format(np.std(im)))
+
+class Radiography(Experiment):
+
+    """A set of devices and acquisitions allowing to acquire radiograms with and without beam.
+    .. attribute:: num_darks
+    .. attribute:: num_flats
+        Number of flat fields to acquire
+    .. attribute:: radio_producer
+        A callable which returns a generator which yields radiograms
+    """
+
+    def __init__(self, camera, FFCsetup, walker=None, separate_scans=True, num_darks=0, num_flats=0,
+                 radio_producer=None, callback=None):
+        self.ffcsetup = FFCsetup
+        self.camera = camera
+        self.num_darks = num_darks
+        self.num_flats = num_flats
+        self.radio_producer = radio_producer
+        self.mainguicallback = callback
+        # acquititions
+        flats = Acquisition('flats', self.take_flats)
+        acquisitions = [flats]
+        #if darks_chackbox
+        #    acquisitions.append(darks)
+        #if flat_before:
+            #acquisitions.append(flats)
+        super(Radiography, self).__init__(acquisitions, walker=walker,
+                                          separate_scans=separate_scans)
+
+    def take_flats(self):
+        for i in range(5):
+            yield self.camera.grab()
+            sleep(0.5)
+            #self.mainguicallback(i)
+            #info_message("Image std {:0.2f}".format(np.std(self.camera.grab())))
+            #yield self.camera.grab()
+
+
+
+class FFCsetup(object):
 
     """
     Written by Tomas Farago, KIT
@@ -62,7 +120,7 @@ class FFC(object):
     to perform flat-field correction.
     """
 
-    def __init__(self, shutter, flat_motor=None, flat_position=None, radio_position=None):
+    def __init__(self, shutter = None, flat_motor=None, flat_position=None, radio_position=None):
         self.shutter = shutter
         self.flat_motor = flat_motor
         self.flat_position = flat_position
@@ -99,46 +157,9 @@ class FFC(object):
     def prepare_radios(self, block=True):
         return self._manipulate_flat_motor(self.radio_position, block=block)
 
-class Radiography(Experiment):
 
-    """A set of devices and acquisitions allowing to acquire radiograms with and without beam.
-    .. attribute:: num_darks
-    .. attribute:: num_flats
-        Number of flat fields to acquire
-    .. attribute:: radio_producer
-        A callable which returns a generator which yields radiograms
-    """
 
-    def __init__(self, camera, setup, walker=None, separate_scans=True, num_darks=0, num_flats=0,
-                 radio_producer=None):
-        self.setup = setup
-        self.camera = camera
-        self.num_darks = num_darks
-        self.num_flats = num_flats
-        self.radio_producer = radio_producer
-        # acquititions
-        flats = Acquisition('flats', self.take_flats)
-        acquisitions = [flats]
-        #if darks_chackbox
-        #    acquisitions.append(darks)
-        #if flat_before:
-            #acquisitions.append(flats)
-        super(Radiography, self).__init__(acquisitions, walker=walker,
-                                          separate_scans=separate_scans)
 
-    def take_flats(self):
-
-        for i in range(5):
-            #yield self.camera.grab()
-            sleep(5)
-            #info_message("Image std {:0.2f}".format(np.std(self.camera.grab())))
-            #yield self.camera.grab()
-
-@coroutine
-def mystd():
-    while True:
-        im = yield
-        info_message("Image std {:0.2f}".format(np.std(im)))
         #print "STD {:0.2f}".format(np.std(im))
 
 def test(camera):

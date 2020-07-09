@@ -57,6 +57,11 @@ class CameraControlsGroup(QGroupBox):
         self.viewer = viewer
         self.live_on = False
 
+        # FOR TESTING PURPOSES
+        self.test_label = QLabel()
+        self.test_label.setText("Some info for testing")
+        self.test_entry = QLabel()
+
         # EXPOSURE
         self.exposure_label = QLabel()
         self.exposure_label.setText("EXPOSURE [msec]")
@@ -183,6 +188,10 @@ class CameraControlsGroup(QGroupBox):
 
         for column in range(6):
             layout.setColumnStretch(column, 1)
+
+        # TEST
+        layout.addWidget(self.test_label, 2, 2)
+        layout.addWidget(self.test_entry, 2, 3)
 
         # ROI/bin group
         layout.addWidget(self.roi_y0_label, 4, 0)

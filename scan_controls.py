@@ -64,7 +64,7 @@ class ScanControlsGroup(QGroupBox):
         self.outer_loop_label = QLabel()
         self.outer_loop_label.setText("Outer loop")
         self.outer_loop_motor = QComboBox()
-        self.outer_loop_motor.addItems(["Vertical [mm]", "Time [sec]"])
+        #self.outer_loop_motor.addItems(["Vertical [mm]", "Time [sec]"])
         self.outer_loop_start_entry = QLineEdit()
         self.outer_loop_steps_entry = QLineEdit()
         self.outer_loop_range_entry = QLineEdit()
@@ -75,7 +75,7 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_label = QLabel()
         self.inner_loop_label.setText("Inner loop")
         self.inner_loop_motor = QComboBox()
-        self.inner_loop_motor.addItems(["CT [deg]", "Time [sec]", "ACry [urad]", "Horizontal [mm]"])
+        #self.inner_loop_motor.addItems(["CT [deg]", "Time [sec]", "ACry [urad]", "Horizontal [mm]"])
         self.inner_loop_flats_0 = QCheckBox("FLATS BEFORE")
         self.inner_loop_start_entry = QLineEdit()
         self.inner_loop_start_entry.setText("0")
@@ -129,9 +129,23 @@ class ScanControlsGroup(QGroupBox):
         self.setLayout(layout)
 
     @property
-    def inner_loop_steps(self):
+    def steps(self):
         try:
             return int(self.inner_loop_steps_entry.text())
+        except ValueError:
+            return None
+
+    @property
+    def start(self):
+        try:
+            return float(self.inner_loop_start_entry.text())
+        except ValueError:
+            return None
+
+    @property
+    def range(self):
+        try:
+            return int(self.inner_loop_range.text())
         except ValueError:
             return None
 

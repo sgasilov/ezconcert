@@ -12,10 +12,10 @@ class FFCSettingsGroup(QGroupBox):
         super(FFCSettingsGroup, self).__init__(*args, **kwargs)
 
         self.motor = motor
-        self.motor_label = QLabel()
-        self.motor_label.setText("MOTOR")
-        self.motor = QComboBox()
-        self.motor.addItems(["Horizontal", "Vertical"])
+        self.motor_options_label = QLabel()
+        self.motor_options_label.setText("MOTOR")
+        self.motor_options_entry = QComboBox()
+        #self.motor_options_entry.addItems(["Horizontal [mm]", "Vertical [mm]"])
 
         # motor positions
         self.flat_position_label = QLabel()
@@ -37,24 +37,14 @@ class FFCSettingsGroup(QGroupBox):
 
         # acquire button and motor position indicators
         self.getflatsdarks_button = guibutton
-        self.mot_pos_info_label = QLabel()
-        self.mot_pos_info_label.setText("Current positions of motors")
-        self.hor_mot_pos_label = QLabel()
-        self.hor_mot_pos_label.setText("Horizontal [mm]")
-        self.hor_mot_pos_entry = QLabel()
-        self.vert_mot_pos_label = QLabel()
-        self.vert_mot_pos_label.setText("Vertical [mm]")
-        self.vert_mot_pos_entry = QLabel()
-        self.rot_mot_pos_label = QLabel()
-        self.rot_mot_pos_label.setText("CT stage [deg]")
-        self.rot_mot_pos_entry = QLabel()
+
 
         self.set_layout()
 
     def set_layout(self):
         layout = QGridLayout()
-        layout.addWidget(self.motor_label, 0, 0)
-        layout.addWidget(self.motor, 0, 1)
+        layout.addWidget(self.motor_options_label, 0, 0)
+        layout.addWidget(self.motor_options_entry, 0, 1)
         layout.addWidget(self.radio_position_label, 0, 2)
         layout.addWidget(self.radio_position_entry, 0, 3)
         layout.addWidget(self.flat_position_label, 0, 4)
@@ -65,17 +55,17 @@ class FFCSettingsGroup(QGroupBox):
         layout.addWidget(self.numdarks_entry, 0, 9)
 
         layout.addWidget(self.getflatsdarks_button, 1, 0)
-        layout.addWidget(self.mot_pos_info_label,1,1)
-        layout.addWidget(self.hor_mot_pos_label,1,2)
-        layout.addWidget(self.hor_mot_pos_entry, 1, 3)
-        layout.addWidget(self.vert_mot_pos_label, 1, 4)
-        layout.addWidget(self.vert_mot_pos_entry, 1, 5)
-        layout.addWidget(self.rot_mot_pos_label, 1, 6)
-        layout.addWidget(self.rot_mot_pos_entry, 1, 7)
+
 
 
         self.setLayout(layout)
 
+    @property
+    def flat_motor(self):
+        try:
+            return self.motor_options_entry.text()
+        except ValueError:
+            return None
     @property
     def flat_position(self):
         try:
