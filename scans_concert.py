@@ -27,6 +27,16 @@ def run(n, callback):
         callback(i)
         sleep(0.5)
 
+
+@coroutine
+def on_data_changed():
+    while True:
+        im = yield
+        #data_changed_signal.emit("{:0.3f}".format(np.std(im)))
+        print("{:0.3f}".format(np.std(im)))
+        ConcertScanThread.data_changed_signal.emit("{:0.3f}".format(np.std(im)))
+
+
 class ConcertScanThread(QThread):
 #class ConcertScanThread(QObject):
     """
@@ -41,6 +51,7 @@ class ConcertScanThread(QThread):
 
     def __init__(self, viewer, camera, flat_motor=None, inner_motor=None):
         super(ConcertScanThread, self).__init__()
+        print "hi"
         self.viewer = viewer
         self.camera = camera
         self.ffcsetup = FFCsetup()
@@ -48,31 +59,25 @@ class ConcertScanThread(QThread):
         atexit.register(self.stop)
         self.scan_running = False
         self.exp = Radiography(self.camera, self.ffcsetup)#, callback=self.on_data_changed)
-        self.cons = Consumer(self.exp.acquisitions, self.on_data_changed())
+        self.cons = Consumer(self.exp.acquisitions, on_data_changed())
         #inject((camera.grab() for i in range(10)), self.on_data_changed())
 
     def stop(self):
-        self.thread_running = False
+        #self.thread_running = False
         self.wait()
 
     def run(self): # .start() calls this function
-        while self.thread_running:
-            if self.scan_running:
-                #inject((self.camera.grab() for i in range(10)), self.on_data_changed())
-                self.exp.run()
-                #run(10, callback=self.on_data_changed)
-                self.scan_finished_signal.emit()
-            else:
-                sleep(1)
+        #cons = Consumer(self.exp.acquisitions, on_data_changed())
+        #inject((self.camera.grab() for i in range(10)), self.on_data_changed())
+        running_experiment = self.exp.run()
+        #run(10, callback=self.on_data_changed)
+        while not running_experiment.done():
+            sleep(1)
+        self.scan_finished_signal.emit()
+
 
     # def on_data_changed(self, value, **kwargs):
     #     self.data_changed_signal.emit("{}".format(value))
-
-    @coroutine
-    def on_data_changed(self):
-        while True:
-            im = yield
-            self.data_changed_signal.emit("{:0.3f}".format(np.std(im)))
 
 class Radiography(Experiment):
 
@@ -103,7 +108,7 @@ class Radiography(Experiment):
                                           separate_scans=separate_scans)
 
     def take_flats(self):
-        for i in range(5):
+        for i in range(10):
             yield self.camera.grab()
             sleep(0.5)
             #self.mainguicallback(i)

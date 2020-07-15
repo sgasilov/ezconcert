@@ -30,7 +30,7 @@ from concert.experiments.base import Acquisition, Experiment
 from concert.session.utils import abort
 from concert.coroutines.base import coroutine, inject
 
-import asyncio
+#import asyncio
 from scans_concert import ConcertScanThread
 
 # Adam's interface EPICS-Concert interface
@@ -233,8 +233,9 @@ class GUI(QDialog):
     def on_camera_connected(self, camera):
         self.concert_scan = ConcertScanThread(self.viewer, camera)
         self.concert_scan.data_changed_signal.connect(self.camera_controls_group.test_entry.setText)
+        #data_changed_signal.connect(self.camera_controls_group.test_entry.setText)
         self.concert_scan.scan_finished_signal.connect(self.end_of_scan)
-        self.concert_scan.start()
+        #self.concert_scan.start()
         #self.camera = camera
         self.scan_controls_group.setEnabled(True)
         self.ffc_controls_group.setEnabled(True)
@@ -243,7 +244,10 @@ class GUI(QDialog):
 
 
     def start(self):
-        self.concert_scan.scan_running = True
+        self.start_button.setEnabled(False)
+        self.abort_button.setEnabled(True)
+        self.return_button.setEnabled(False)
+        self.concert_scan.start()
 
     # def start(self):
     #     #info_message("Scan started")
@@ -379,6 +383,5 @@ class GUI(QDialog):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     loop = QEventLoop(app)
-    asyncio.set_event_loop(loop)
     ex = GUI()
     sys.exit(app.exec_())
