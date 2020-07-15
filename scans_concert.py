@@ -34,11 +34,10 @@ def on_data_changed():
         im = yield
         #data_changed_signal.emit("{:0.3f}".format(np.std(im)))
         print("{:0.3f}".format(np.std(im)))
-        ConcertScanThread.data_changed_signal.emit("{:0.3f}".format(np.std(im)))
+        #ConcertScanThread.data_changed_signal.emit("{:0.3f}".format(np.std(im)))
 
 
 class ConcertScanThread(QThread):
-#class ConcertScanThread(QObject):
     """
     Creates Concert Experiment
     from Concert Acqusitions
@@ -59,7 +58,7 @@ class ConcertScanThread(QThread):
         atexit.register(self.stop)
         self.scan_running = False
         self.exp = Radiography(self.camera, self.ffcsetup)#, callback=self.on_data_changed)
-        self.cons = Consumer(self.exp.acquisitions, on_data_changed())
+        self.cons = Consumer(self.exp.acquisitions, on_data_changed)
         #inject((camera.grab() for i in range(10)), self.on_data_changed())
 
     def stop(self):
@@ -67,10 +66,8 @@ class ConcertScanThread(QThread):
         self.wait()
 
     def run(self): # .start() calls this function
-        #cons = Consumer(self.exp.acquisitions, on_data_changed())
         #inject((self.camera.grab() for i in range(10)), self.on_data_changed())
         running_experiment = self.exp.run()
-        #run(10, callback=self.on_data_changed)
         while not running_experiment.done():
             sleep(1)
         self.scan_finished_signal.emit()
@@ -108,7 +105,12 @@ class Radiography(Experiment):
                                           separate_scans=separate_scans)
 
     def take_flats(self):
-        for i in range(10):
+        # print("Before first yield")
+        # yield self.camera.grab()
+        # sleep(2)
+        # print("I'm here'!")
+        # yield self.camera.grab()
+        for i in range(5):
             yield self.camera.grab()
             sleep(0.5)
             #self.mainguicallback(i)
