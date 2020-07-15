@@ -30,7 +30,7 @@ from concert.experiments.base import Acquisition, Experiment
 from concert.session.utils import abort
 from concert.coroutines.base import coroutine, inject
 
-import asyncio
+#import asyncio
 from scans_concert import ConcertScanThread
 
 # Adam's interface EPICS-Concert interface
@@ -240,10 +240,11 @@ class GUI(QDialog):
         self.ffc_controls_group.setEnabled(True)
         self.file_writer_group.setEnabled(True)
 
-
-
     def start(self):
-        self.concert_scan.scan_running = True
+        self.start_button.setEnabled(False)
+        self.abort_button.setEnabled(True)
+        self.return_button.setEnabled(False)
+        self.concert_scan.start_scan()
 
     # def start(self):
     #     #info_message("Scan started")
@@ -288,26 +289,31 @@ class GUI(QDialog):
     #     #info_message("Scan finished")
 
     def abort(self):
+        self.concert_scan.abort_scan()
+        self.start_button.setEnabled(True)
+        self.abort_button.setEnabled(False)
+        self.return_button.setEnabled(True)
         # calls global Concert abort() command
         # aborst concert experiemnt not necesserely stops motor
         self.scan_status_update_timer.stop()
-        self.scan.abort()
+
         #global concert abort to stop motors
         #abort()
         info_message("Scan aborted")
         #self.scan_thread.scan_running = False
-        self.start_button.setEnabled(True)
-        self.abort_button.setEnabled(False)
-        self.return_button.setEnabled(True)
 
     def end_of_scan(self):
-        self.concert_scan.scan_running = False
         # call abort command instead
         # self.scan_status_update_timer.stop()
+
+        #### This section runs only if scan was finished normally, but not aborted ###
+        if not self.return_button.isEnabled():
+            info_message("Scan finished")
+        #### End of section
+
         # info_message("Scan finished, future state{}, yielded {} times".format(self.f.done(), self.tmp))
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
-        self.return_button.setEnabled(False)
 
     def update_all_cam_params(self):
         ''' updates camera parameter with value in GUI entries'''
@@ -379,6 +385,5 @@ class GUI(QDialog):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     loop = QEventLoop(app)
-    asyncio.set_event_loop(loop)
     ex = GUI()
     sys.exit(app.exec_())
