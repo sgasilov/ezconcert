@@ -41,27 +41,48 @@ class ConcertScanThread(QThread):
 
     def __init__(self, viewer, camera, flat_motor=None, inner_motor=None):
         super(ConcertScanThread, self).__init__()
-        print "hi"
         self.viewer = viewer
         self.camera = camera
         self.ffcsetup = FFCsetup()
         self.thread_running = True
         atexit.register(self.stop)
-        self.scan_running = False
-        self.exp = Radiography(self.camera, self.ffcsetup)#, callback=self.on_data_changed)
-        self.cons = Consumer(self.exp.acquisitions, self.on_data_changed)
-        #inject((camera.grab() for i in range(10)), self.on_data_changed())
+        self.starting_scan = False
+        self.exp = Radiography(self.camera, self.ffcsetup)
+        self.cons = Consumer(self.exp.acquisitions, self.viewer)
+        # self.cons = Consumer(self.exp.acquisitions, self.on_data_changed)
+        self.running_experiment = None
 
     def stop(self):
-        #self.thread_running = False
+        self.thread_running = False
         self.wait()
 
     def run(self): # .start() calls this function
-        #inject((self.camera.grab() for i in range(10)), self.on_data_changed())
-        running_experiment = self.exp.run()
-        while not running_experiment.done():
-            sleep(1)
-        self.scan_finished_signal.emit()
+        while self.thread_running:
+            if self.starting_scan:
+                self.running_experiment = self.exp.run()
+                self.starting_scan = False
+            else:
+                sleep(1)
+                self.check_scan_state()
+
+    def check_scan_state(self):
+        if self.running_experiment is not None:
+            try:
+                if self.running_experiment.done():
+                    self.scan_finished_signal.emit()
+                    self.running_experiment = None
+            except:
+                pass
+
+    def start_scan(self):
+        self.starting_scan = True
+
+    def abort_scan(self):
+        try:
+            self.exp.abort()
+            self.running_experiment = None
+        except:
+            pass
 
     @coroutine
     def on_data_changed(self):
@@ -105,7 +126,7 @@ class Radiography(Experiment):
         # sleep(2)
         # print("I'm here'!")
         # yield self.camera.grab()
-        for i in range(5):
+        for i in range(15):
             yield self.camera.grab()
             sleep(0.5)
             #self.mainguicallback(i)
