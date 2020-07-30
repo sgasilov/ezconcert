@@ -28,6 +28,7 @@ from concert.experiments.addons import ImageWriter
 from concert.experiments.addons import Consumer
 from concert.experiments.base import Acquisition, Experiment
 from concert.session.utils import abort
+from concert.devices.base import abort as device_abort
 from concert.coroutines.base import coroutine, inject
 
 #import asyncio
@@ -206,14 +207,14 @@ class GUI(QDialog):
 
     def connect_CT_motor_func(self):
         try:
-            self.CT_motor = ABRS("SMTR1605-2-B10-10:mm", encoded=True)
+            self.CT_motor = ABRS("ABRS1605-01:deg", encoded=True)
         except:
             error_message("Could not connect to CT stage, try again")
         if self.CT_motor is not None:
             self.CT_mot_pos_label.setText("Connected, position [deg]")
             tmp = "CT stage [deg]"
-            self.motors[tmp] = self.hor_motor
-            self.connect_vert_mot_button.setEnabled(False)
+            self.motors[tmp] = self.CT_motor
+            self.connect_CT_mot_button.setEnabled(False)
             self.scan_controls_group.inner_loop_motor.addItem(tmp)
 
     def connect_time_motor_func(self):
@@ -221,14 +222,21 @@ class GUI(QDialog):
             self.time_motor = SimMotor()
         except:
             error_message("Can not connect to timer")
-        tmp = "Timer [sec]"
-        self.motors[tmp] = self.time_motor
-        #self.motors[tmp] = self.motor_time
-        self.scan_controls_group.inner_loop_motor.addItem(tmp)
-        self.scan_controls_group.outer_loop_motor.addItem(tmp)
+        if self.time_motor is not None:
+            tmp = "Timer [sec]"
+            self.motors[tmp] = self.time_motor
+            #self.motors[tmp] = self.motor_time
+            self.scan_controls_group.inner_loop_motor.addItem(tmp)
+            self.scan_controls_group.outer_loop_motor.addItem(tmp)
 
     def connect_shutter_func(self):
-        error_message("Not implemented")
+        try:
+            self.shutter = CLSShutter("FIS1605-2-01")
+        except:
+            error_message("Could not connect to fast imaging shutter, try again")
+        if self.shutter is not None:
+            tmp = "Shutter []"
+            self.motors[tmp] = self.shutter
 
     def on_camera_connected(self, camera):
         self.concert_scan = ConcertScanThread(self.viewer, camera)
@@ -297,8 +305,10 @@ class GUI(QDialog):
         # aborst concert experiemnt not necesserely stops motor
         self.scan_status_update_timer.stop()
 
-        #global concert abort to stop motors
+        #global concert abort to stop sessions
         #abort()
+        # use motor list to abort
+        device_abort(m for m in self.motors.values() if m is not None)
         info_message("Scan aborted")
         #self.scan_thread.scan_running = False
 

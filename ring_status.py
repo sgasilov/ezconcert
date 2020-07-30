@@ -30,16 +30,20 @@ class RingStatusGroup(QGroupBox):
         # Ring status
         self.ringstatus_spacer = QLabel()
         self.ringstatus_label = QLabel()
-        self.ringstatus_label.setText("Ring state")
+        self.ringstatus_label.setText("Veto state")
         self.ringstatus_entry = QLabel()
         self.ringstatus_entry.setFixedWidth(50)
+        self.status_monitor = StatusMonitor()
+        self.status_monitor.i0_state_changed_signal.connect(self.ringstatus_entry.setText)
 
         # injection in
         self.inj_countdown_spacer = QLabel()
         self.inj_countdown_label = QLabel()
-        self.inj_countdown_label.setText("Injection in [sec]")
+        self.inj_countdown_label.setText("Pre-Injection Lead [sec]")
         self.inj_countdown_entry = QLabel()
         self.inj_countdown_entry.setFixedWidth(50)
+        self.lead_monitor = LeadMonitor()
+        self.lead_monitor.i0_state_changed_signal.connect(self.inj_countdown_entry.setText)
 
         self.set_layout()
 
@@ -70,6 +74,45 @@ class EpicsMonitor(QObject):
         self.i0 = PV(I0_PV, callback=self.on_i0_state_changed)
 
     def on_i0_state_changed(self, value, **kwargs):
+        """
+        :param value: the latest value from the PV
+        :param kwargs: the rest of arguments
+        :return: None
+        """
+        self.i0_state_changed_signal.emit("{:.1f}".format(value))
+
+ID_VETO_PV = "TRG1605-1-I20-01:topup:veto"
+BM_VETO_PV = "TRG1605-1-B10-01:topup:veto"
+class StatusMonitor(QObject):
+    i0_state_changed_signal = pyqtSignal(str)
+
+    def __init__(self):
+        super(StatusMonitor, self).__init__()
+        self.i0 = PV(BM_VETO_PV, callback=self.on_state_changed)
+
+    def on_state_changed(self, value, **kwargs):
+        """
+        :param value: the latest value from the PV
+        :param kwargs: the rest of arguments
+        :return: None
+        """
+        if value:
+            value = "Veto"
+        else:
+            value = "Clear"
+        self.i0_state_changed_signal.emit("{}".format(value))
+
+
+ID_LEAD_PV = "TRG1605-1-I20-01:topup:veto:lead"
+BM_LEAD_PV = "TRG1605-1-B10-01:topup:veto:lead"
+class LeadMonitor(QObject):
+    i0_state_changed_signal = pyqtSignal(str)
+
+    def __init__(self):
+        super(LeadMonitor, self).__init__()
+        self.i0 = PV(BM_LEAD_PV, callback=self.on_state_changed)
+
+    def on_state_changed(self, value, **kwargs):
         """
         :param value: the latest value from the PV
         :param kwargs: the rest of arguments
