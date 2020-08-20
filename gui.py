@@ -30,7 +30,7 @@ from concert.experiments.base import Acquisition, Experiment
 from concert.session.utils import abort
 from concert.coroutines.base import coroutine, inject
 
-import asyncio
+# import asyncio
 from scans_concert import ConcertScanThread
 
 # Adam's interface EPICS-Concert interface
@@ -378,7 +378,7 @@ class GUI(QDialog):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    loop = QEventLoop(app)
-    asyncio.set_event_loop(loop)
+    # loop = QEventLoop(app)
+    # asyncio.set_event_loop(loop)
     ex = GUI()
     sys.exit(app.exec_())

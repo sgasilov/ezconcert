@@ -48,7 +48,7 @@ class ConcertScanThread(QThread):
         atexit.register(self.stop)
         self.scan_running = False
         self.exp = Radiography(self.camera, self.ffcsetup)#, callback=self.on_data_changed)
-        self.cons = Consumer(self.exp.acquisitions, self.on_data_changed())
+        self.cons = Consumer(self.exp.acquisitions, on_data_changed())
         #inject((camera.grab() for i in range(10)), self.on_data_changed())
 
     def stop(self):
@@ -68,11 +68,18 @@ class ConcertScanThread(QThread):
     # def on_data_changed(self, value, **kwargs):
     #     self.data_changed_signal.emit("{}".format(value))
 
-    @coroutine
-    def on_data_changed(self):
-        while True:
-            im = yield
-            self.data_changed_signal.emit("{:0.3f}".format(np.std(im)))
+    # Lisa mod
+    # @coroutine
+    # def on_data_changed(self):
+    #     while True:
+    #         im = yield
+    #         self.data_changed_signal.emit("{:0.3f}".format(np.std(im)))
+
+@coroutine
+def on_data_changed():
+    while True:
+        im = yield
+        info_message("{:0.3f}".format(np.std(im)))
 
 class Radiography(Experiment):
 
@@ -107,7 +114,7 @@ class Radiography(Experiment):
             yield self.camera.grab()
             sleep(0.5)
             #self.mainguicallback(i)
-            #info_message("Image std {:0.2f}".format(np.std(self.camera.grab())))
+            info_message("Image std {:0.2f}".format(i))
             #yield self.camera.grab()
 
 
