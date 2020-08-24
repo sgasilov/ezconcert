@@ -3,12 +3,15 @@ from random import choice
 from time import sleep
 
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject
-from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, QPushButton, QComboBox
+from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, \
+                            QPushButton, QComboBox, QFileDialog
 
 from message_dialog import info_message, error_message, warning_message
 
 from concert.devices.cameras.uca import Camera as UcaCamera
 from concert.devices.cameras.dummy import Camera as DummyCamera
+from concert.storage import write_tiff
+import os.path as osp
 from matplotlib import pyplot as plt
 from concert.devices.cameras.base import CameraError
 
@@ -42,6 +45,8 @@ class CameraControlsGroup(QGroupBox):
         self.save_one_image_button = QPushButton("SAVE 1 image")
         self.save_one_image_button.clicked.connect(self.save_one_image)
         self.save_one_image_button.setEnabled(False)
+        self.QFD = QFileDialog()
+        self.nim = 0
 
         # Connect to camera
         self.connect_to_camera_button = QPushButton("Connect to camera")
@@ -320,8 +325,9 @@ class CameraControlsGroup(QGroupBox):
                 self.camera.trigger_source = self.camera.trigger_sources.AUTO
             self.camera.start_recording()
         except:
-            if self.camera_model_label.text() != 'Dummy camera':
-                error_message("Cannot change acquisition mode and trigger source")
+            #if self.camera_model_label.text() != 'Dummy camera':
+            #    error_message("Cannot change acquisition mode and trigger source")
+            pass
         self.live_preview_thread.live_on = True
 
     def live_off_func(self):
@@ -332,13 +338,48 @@ class CameraControlsGroup(QGroupBox):
         try:
             self.camera.stop_recording()
         except:
-            if self.camera_model_label.text() != 'Dummy camera':
-                error_message("Cannot stop recording")
+            pass
+            #if self.camera_model_label.text() != 'Dummy camera':
+            #    error_message("Cannot stop recording")
 
     def save_one_image(self):
         self.save_one_image_button.setEnabled(False)
-        info_message("Saving one image...")
-        self.timer.singleShot(5000, self.on_image_saved)
+
+        #options = QFileDialog.Options()
+        #options |= QFileDialog.DontUseNativeDialog
+        pth = "/data/image-"
+        #tmp = osp.join(pth,'image-')
+        #self.QFD.selectFile(tmp)
+        f, fext = self.QFD.getSaveFileName(self, 'Save image', pth, "Image Files (*.tif)")
+        #info_message("{:}".format(fname))
+        if f == pth:
+            fname = "{}{:>04}.tif".format(f,self.nim)
+            self.nim += 1
+        else:
+            fname = f + '.tif'
+        tmp = False
+        if self.live_preview_thread.live_on == True:
+            self.live_off_func()
+            tmp = True
+        if self.camera_model_label.text() != 'Dummy camera':
+            if self.camera.state == 'recording':
+                self.camera.stop_recording()
+            self.camera['trigger_source'].stash().join()
+            self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+        try:
+            if self.camera_model_label.text() != 'Dummy camera':
+                with self.camera.recording():
+                    self.camera.trigger()
+                    im = self.camera.grab()
+            else:
+                im = self.camera.grab()
+        finally:
+            write_tiff(fname, im)
+            if self.camera_model_label.text() != 'Dummy camera':
+                self.camera['trigger_source'].restore().join()
+            self.save_one_image_button.setEnabled(True)
+        if tmp == True:
+            self.live_on_func()
 
     def on_image_saved(self):
         self.save_one_image_button.setEnabled(True)
@@ -348,7 +389,7 @@ class CameraControlsGroup(QGroupBox):
     @property
     def exp_time(self):
         try:
-            return int(self.exposure_entry.text())
+            return float(self.exposure_entry.text())
         except ValueError:
             return None
 

@@ -27,7 +27,8 @@ class ScanControlsGroup(QGroupBox):
     Camera controls
     """
 
-    def __init__(self, start_button, abort_button, return_button, scan_fps_entry,
+    def __init__(self, start_button, abort_button, return_button,
+                 scan_fps_entry, ffc_button, p180_button,
                  motor_inner, motor_outer, *args, **kwargs):
         super(ScanControlsGroup, self).__init__(*args, **kwargs)
         # Timer - just as example
@@ -41,6 +42,8 @@ class ScanControlsGroup(QGroupBox):
         self.start_button = start_button
         self.abort_button = abort_button
         self.return_button = return_button
+        self.ffc_button = ffc_button
+        self.p180_button = p180_button
         # FPS indicator
         self.scan_fps_label = QLabel()
         self.scan_fps_label.setText("Average fps")
@@ -94,6 +97,9 @@ class ScanControlsGroup(QGroupBox):
         layout.addWidget(self.start_button, 0, 0, 1, 2)
         layout.addWidget(self.abort_button, 0, 2, 1, 2)
         layout.addWidget(self.return_button, 0, 4, 1, 2)
+        layout.addWidget(self.scan_fps_label, 0, 6)
+        layout.addWidget(self.ffc_button, 0, 7)
+        layout.addWidget(self.p180_button, 0, 8)
 
         # Top labels
         layout.addWidget(self.motor_label, 1, 1)

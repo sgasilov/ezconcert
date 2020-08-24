@@ -9,7 +9,6 @@ from time import sleep
 from concert.async import async, wait
 from concert.base import identity
 from concert.quantities import q
-from concert.networking.base import get_tango_device
 from concert.experiments.base import Acquisition, Experiment
 from concert.experiments.imaging import (tomo_projections_number, tomo_max_speed, frames)
 from concert.devices.cameras.base import CameraError
@@ -17,8 +16,9 @@ from concert.devices.cameras.pco import Timestamp
 from concert.devices.cameras.uca import Camera as UcaCamera
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject
 from concert.coroutines.base import coroutine, inject
-from concert.experiments.addons import Consumer
+from concert.experiments.addons import Consumer, ImageWriter
 from message_dialog import info_message
+from concert.storage import DirectoryWalker
 import numpy as np
 
 
@@ -47,10 +47,22 @@ class ConcertScanThread(QThread):
         self.thread_running = True
         atexit.register(self.stop)
         self.starting_scan = False
-        self.exp = Radiography(self.camera, self.ffcsetup)
+        # purely for testing - local walker
+        # end of test fragment
+        self.exp = Radiography(self.camera, self.ffcsetup, \
+                               walker=None, sep_scans=True)
         self.cons = Consumer(self.exp.acquisitions, self.viewer)
-        # self.cons = Consumer(self.exp.acquisitions, self.on_data_changed)
+        self.writer = None
         self.running_experiment = None
+
+    def attach_file_writer(self, walker, ctsetname, sep_scans):
+        self.writer = ImageWriter(self.exp.acquisitions, walker, async=True)
+        self.exp.walker = walker
+        self.exp._set_name_fmt(ctsetname)
+        self.exp.separate_scans = sep_scans
+
+    def set_camera_params(self, exp_time):
+        self.camera.exposure_time = exp_time * q.msec
 
     def stop(self):
         self.thread_running = False
@@ -102,7 +114,9 @@ class Radiography(Experiment):
         A callable which returns a generator which yields radiograms
     """
 
-    def __init__(self, camera, FFCsetup, walker=None, separate_scans=True, num_darks=0, num_flats=0,
+    def __init__(self, camera, FFCsetup, \
+                 walker=None, sep_scans=True, name_fmt="frame_{:>05}.tif",\
+                 num_darks=0, num_flats=0, \
                  radio_producer=None, callback=None):
         self.ffcsetup = FFCsetup
         self.camera = camera
@@ -118,7 +132,8 @@ class Radiography(Experiment):
         #if flat_before:
             #acquisitions.append(flats)
         super(Radiography, self).__init__(acquisitions, walker=walker,
-                                          separate_scans=separate_scans)
+                                          separate_scans=sep_scans,
+                                          name_fmt=name_fmt)
 
     def take_flats(self):
         # print("Before first yield")

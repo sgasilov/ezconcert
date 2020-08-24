@@ -33,6 +33,7 @@ class FileWriterGroup(QGroupBox):
         self.ctset_fmt_entry.setFixedWidth(200)
 
         self.separate_scans_checkbox = QCheckBox("Separate scans")
+        self.separate_scans_checkbox.setChecked(True)
         self.set_layout()
 
     def set_layout(self):
