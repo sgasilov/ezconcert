@@ -73,6 +73,7 @@ class ScanControlsGroup(QGroupBox):
         self.outer_loop_range_entry = QLineEdit()
         self.outer_loop_endpoint = QCheckBox("Include")
         self.outer_loop_continuous = QCheckBox("CONTINUOUS")
+        self.outer_loop_continuous.setChecked(False)
 
         # Inner loop
         self.inner_loop_label = QLabel()
@@ -89,6 +90,7 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_endpoint = QCheckBox("Include")
         self.inner_loop_flats_1 = QCheckBox("FLATS AFTER")
         self.inner_loop_continuous = QCheckBox("CONTINUOUS")
+        self.inner_loop_continuous.setChecked(False)
         self.set_layout()
 
     def set_layout(self):
@@ -164,19 +166,19 @@ class ScanControlsGroup(QGroupBox):
 
     @property
     def inner_endpoint(self):
-        self.inner_loop_endpoint.isChecked()
+        return self.inner_loop_endpoint.isChecked()
 
     @property
     def ffc_before(self):
-        self.inner_loop_flats_0.isChecked()
+        return self.inner_loop_flats_0.isChecked()
 
     @property
     def ffc_after(self):
-        self.inner_loop_flats_1.isChecked()
+        return self.inner_loop_flats_1.isChecked()
 
     @property
     def inner_cont(self):
-        self.inner_loop_continuous.isChecked()
+        return self.inner_loop_continuous.isChecked()
 
 
 

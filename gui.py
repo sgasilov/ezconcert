@@ -259,8 +259,8 @@ class GUI(QDialog):
         #self.scan_controls_group.setStyleSheet('QGroupBox:title {"font-weight: bold; color: green"}')
         self.concert_scan.start_scan()
         # must inform users if there is an attempt to overwrite data
-        # that is ctsetname is not a pattern and its name hasnot been change
-        # since the last run. In principle data cannot be ovewritten, but
+        # that is ctsetname is not a pattern and its name has'not been change
+        # since the last run. Data cannot be overwritten, but
         # Experiment will simply quite without any warnings
 
     def set_scan_params(self):
@@ -297,11 +297,12 @@ class GUI(QDialog):
 
         #### SET FFC parameters
         self.concert_scan.ffc_setup.shutter = self.shutter
-        self.concert_scan.ffc_setup.flat_motor = self.motors[self.ffc_controls_group.flat_motor]
+        try:
+            self.concert_scan.ffc_setup.flat_motor = self.motors[self.ffc_controls_group.flat_motor]
+        except:
+            pass # if ffc is requested show error in case if motor is not selected
         self.concert_scan.ffc_setup.radio_position = self.ffc_controls_group.radio_position
         self.concert_scan.ffc_setup.flat_position = self.ffc_controls_group.radio_position
-
-        #self.concert_scan.exp.finish = self.concert_scan.exp.finish()
 
         # POPULATE THE LIST OF ACQUSITIONS
         acquisitions = []
@@ -322,12 +323,24 @@ class GUI(QDialog):
         # if self.ffc_controls_group.num_darks>0:
         #     self.concert_scan.exp.add(self.concert_scan.exp.darks_softr)
 
+
         # CREATE NEW WALKER
-        walker = DirectoryWalker(root=self.file_writer_group.root_dir,
+        if self.file_writer_group.isChecked():
+            self.concert_scan.walker = DirectoryWalker(root=self.file_writer_group.root_dir,
                                  dsetname=self.file_writer_group.dsetname)
+        else:
+            # if writer is disabled we do not need walker as well
+            self.concert_scan.walker = None
+
+        # WE MUST DETACH OLD WRITER IF IT EXISTS
+        try:
+            self.concert_scan.cons_writer.detach()
+            self.concert_scan.cons_viewer.detach()
+        except:
+            pass
 
         # CREATE NEW INSTANCE OF CONCERT EXPERIMENT
-        self.concert_scan.create_experiment(acquisitions, walker,
+        self.concert_scan.create_experiment(acquisitions,
                                             self.file_writer_group.ctsetname,
                                             self.file_writer_group.separate_scans)
 

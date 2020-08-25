@@ -56,12 +56,12 @@ class ConcertScanThread(QThread):
         self.starting_scan = False
         self.running_experiment = None
 
-    def create_experiment(self, acqusitions, walker, ctsetname, sep_scans):
-        self.exp = Experiment(acquisitions=acqusitions, \
-                              walker=walker, name_fmt=ctsetname, sep_scans=sep_scans)
+    def create_experiment(self, acquisitions, ctsetname, sep_scans):
+        self.exp = Experiment(acquisitions=acquisitions, \
+                              walker=self.walker, separate_scans=sep_scans, name_fmt=ctsetname)
 
-    def attach_writer(self, ctsetname, sep_scans):
-        self.cons_writer = ImageWriter(self.exp.acquisitions, self.walker, async=True)
+    def attach_writer(self, async=True):
+        self.cons_writer = ImageWriter(self.exp.acquisitions, self.walker, async=async)
 
     def attach_viewer(self):
         self.cons_viewer = Consumer(self.exp.acquisitions, self.viewer)
@@ -159,8 +159,8 @@ class ACQsetup(object):
         self.darks_softr = Acquisition('darks', self.take_darks_softr)
         self.dummy_flat_acq = Acquisition('dummy_flat', self.take_dummy)
         self.dummy_tomo_acq = Acquisition('dummy_tomo', self.take_dummy)
-        self.tomo_softtr_notbuf = Acquisition('tomo', self.take_tomo_softr_notbuf)
-        self.tomo_softtr_buf = Acquisition('tomo', self.take_tomo_softr_buf)
+        self.tomo_softr_notbuf = Acquisition('tomo', self.take_tomo_softr_notbuf)
+        self.tomo_softr_buf = Acquisition('tomo', self.take_tomo_softr_buf)
         self.acquisitions = []
         self.exp = None
         #super(Radiography, self).__init__(self.acq, walker=walker,
@@ -188,8 +188,8 @@ class ACQsetup(object):
         self.inner_scan_param.set(self.x).join()
 
     def take_tomo_softr_notbuf(self):
-        self.x = self.inner_start * self.inner_units
-        self.inner_motor.position.set(self.x).join()
+        #self.x = self.inner_start * self.inner_units
+        #self.inner_motor.position.set(self.x).join()
 
         for i in range(11):
             yield self.camera.grab()
