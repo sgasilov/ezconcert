@@ -9,7 +9,7 @@ class FileWriterGroup(QGroupBox):
     def __init__(self, *args, **kwargs):
         super(FileWriterGroup, self).__init__(*args, **kwargs)
         self.setCheckable(True)
-        self.setChecked(False)
+        self.setChecked(True)
 
         self.root_dir_label = QLabel()
         self.root_dir_label.setText("Root dir:")

@@ -83,9 +83,9 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_start_entry = QLineEdit()
         self.inner_loop_start_entry.setText("0")
         self.inner_loop_steps_entry = QLineEdit()
-        self.inner_loop_steps_entry.setText("2000")
+        self.inner_loop_steps_entry.setText("20")
         self.inner_loop_range_entry = QLineEdit()
-        self.inner_loop_range_entry.setText("180")
+        self.inner_loop_range_entry.setText("10")
         self.inner_loop_endpoint = QCheckBox("Include")
         self.inner_loop_flats_1 = QCheckBox("FLATS AFTER")
         self.inner_loop_continuous = QCheckBox("CONTINUOUS")
@@ -135,37 +135,49 @@ class ScanControlsGroup(QGroupBox):
         self.setLayout(layout)
 
     @property
-    def steps(self):
+    def inner_motor(self):
+        try:
+            return self.inner_loop_motor.currentText()
+        except ValueError:
+            return None
+
+    @property
+    def inner_steps(self):
         try:
             return int(self.inner_loop_steps_entry.text())
         except ValueError:
             return None
 
     @property
-    def start(self):
+    def inner_start(self):
         try:
             return float(self.inner_loop_start_entry.text())
         except ValueError:
             return None
 
     @property
-    def range(self):
+    def inner_range(self):
         try:
-            return int(self.inner_loop_range.text())
+            return int(self.inner_loop_range_entry.text())
         except ValueError:
             return None
 
-    def outer_loop_steps(self):
-        return int(self.outer_loop_steps_entry.text())
+    @property
+    def inner_endpoint(self):
+        self.inner_loop_endpoint.isChecked()
 
-    def check_parameters(self):
-        # Just checking type conversion here
-        try:
-            self.inner_loop_steps()
-            self.outer_loop_steps()
-        except ValueError:
-            return False
-        return True
+    @property
+    def ffc_before(self):
+        self.inner_loop_flats_0.isChecked()
+
+    @property
+    def ffc_after(self):
+        self.inner_loop_flats_1.isChecked()
+
+    @property
+    def inner_cont(self):
+        self.inner_loop_continuous.isChecked()
+
 
 
 

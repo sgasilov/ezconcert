@@ -115,13 +115,13 @@ class CameraControlsGroup(QGroupBox):
         self.buffered_label = QLabel()
         self.buffered_label.setText("BUFFERED")
         self.buffered_entry = QComboBox()
-        self.buffered_entry.addItems(["YES", "NO"])
+        self.buffered_entry.addItems(["NO", "YES"])
 
         # BUFFER LOCATION
         self.buffer_location_label = QLabel()
         self.buffer_location_label.setText("BUFFER LOCATION")
         self.buffer_location_entry = QComboBox()
-        self.buffer_location_entry.addItems(["RAM"])
+        self.buffer_location_entry.addItems(["PC", "Camera"])
 
         # N BUFFERS
         self.n_buffers_label = QLabel()
@@ -132,13 +132,13 @@ class CameraControlsGroup(QGroupBox):
         self.trigger_label = QLabel()
         self.trigger_label.setText("TRIGGER")
         self.trigger_entry = QComboBox()
-        self.trigger_entry.addItems(["AUTO", "EXT", "SOFT"])
+        self.trigger_entry.addItems(["AUTO", "EXTERNAL", "SOFTWARE"])
 
         # ACQUISITION MODE
         self.acq_mode_label = QLabel()
         self.acq_mode_label.setText("ACQUISITION MODE")
         self.acq_mode_entry = QComboBox()
-        self.acq_mode_entry.addItems(["AUTO", "EXT"])
+        self.acq_mode_entry.addItems(["AUTO", "EXTERNAL"])
 
         # PIXELRATE line 6
         self.sensor_pix_rate_label = QLabel()
@@ -215,32 +215,32 @@ class CameraControlsGroup(QGroupBox):
         self.setLayout(layout)
 
     # Convert numeric parameters
-    def exposure(self):
-        return float(self.exposure_entry.text())
+    # def exposure(self):
+    #     return float(self.exposure_entry.text())
+    #
+    # def delay(self):
+    #     return float(self.delay_entry.text())
 
-    def delay(self):
-        return float(self.delay_entry.text())
-
-    def n_buffers(self):
-        return int(self.n_buffers_entry.text())
-
-    def entry_value(self):
-        return float(self.entry.text())
-
-    # Return boolean for "buffered" drop-down list
-    def buffered(self):
-        return self.buffered_entry.currentText() == "YES"
-
-    # Return numeric index for "buffer location" drop-down lists
-    def buffer_location(self):
-        return self.buffer_location_entry.currentIndex()
-
-    # Return text value for other drop-down lists
-    def trigger(self):
-        return self.trigger_entry.currentText()
-
-    def acq_mode(self):
-        return self.acq_mode_entry.currentText()
+    # def n_buffers(self):
+    #     return int(self.n_buffers_entry.text())
+    #
+    # def entry_value(self):
+    #     return float(self.entry.text())
+    #
+    # # Return boolean for "buffered" drop-down list
+    # def buffered(self):
+    #     return self.buffered_entry.currentText() == "YES"
+    #
+    # # Return numeric index for "buffer location" drop-down lists
+    # def buffer_location(self):
+    #     return self.buffer_location_entry.currentIndex()
+    #
+    # # Return text value for other drop-down lists
+    # def trigger(self):
+    #     return self.trigger_entry.currentText()
+    #
+    # def acq_mode(self):
+    #     return self.acq_mode_entry.currentText()
 
     def connect_to_camera(self):
         """
@@ -381,15 +381,18 @@ class CameraControlsGroup(QGroupBox):
         if tmp == True:
             self.live_on_func()
 
-    def on_image_saved(self):
-        self.save_one_image_button.setEnabled(True)
-        info_message("Image saved!")
-
-    #getters/setters
+    # getters/setters
     @property
     def exp_time(self):
         try:
             return float(self.exposure_entry.text())
+        except ValueError:
+            return None
+
+    @property
+    def dead_time(self):
+        try:
+            return float(self.delay_entry.text())
         except ValueError:
             return None
 
@@ -399,6 +402,70 @@ class CameraControlsGroup(QGroupBox):
             return int(self.roi_height_entry.text())
         except ValueError:
             return None
+
+    @property
+    def roi_y0(self):
+        try:
+            return int(self.roi_y0_entry.text())
+        except ValueError:
+            return None
+
+    @property
+    def roi_x0(self):
+        try:
+            return int(self.roi_x0_entry.text())
+        except ValueError:
+            return None
+
+    @property
+    def roi_width(self):
+        try:
+            return int(self.roi_width_entry.text())
+        except ValueError:
+            return None
+
+    @property
+    def trig_mode(self):
+        try:
+            return self.trigger_entry.currentText()
+        except ValueError:
+            return None
+
+    @property
+    def acq_mode(self):
+        try:
+            return self.acq_mode_entry.currentText()
+        except ValueError:
+            return None
+
+    @property
+    def buffered(self):
+        try:
+            if self.buffered_entry.currentText() == "YES":
+                return True
+            else:
+                return False
+        except ValueError:
+            return None
+
+    @property
+    def buffInPCRam(self):
+        try:
+            if self.buffer_location_entry.currentText() == "PC":
+                return True
+            else:
+                return False
+        except ValueError:
+            return None
+
+    @property
+    def buffnum(self):
+        try:
+            return int(self.n_buffers_entry.text())
+        except ValueError:
+            return None
+
+
 
 
 class LivePreviewThread(QThread):
@@ -421,6 +488,8 @@ class LivePreviewThread(QThread):
                 sleep(0.05)
             else:
                 sleep(1)
+
+
 
 # class CameraMonitor(QObject):
 #     camera_connected_signal = pyqtSignal(object)

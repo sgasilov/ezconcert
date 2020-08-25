@@ -63,7 +63,7 @@ class FFCSettingsGroup(QGroupBox):
     @property
     def flat_motor(self):
         try:
-            return self.motor_options_entry.text()
+            return self.motor_options_entry.currentText()
         except ValueError:
             return None
     @property
