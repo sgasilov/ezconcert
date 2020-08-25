@@ -303,26 +303,26 @@ class GUI(QDialog):
             pass # if ffc is requested show error in case if motor is not selected
         self.concert_scan.ffc_setup.radio_position = self.ffc_controls_group.radio_position
         self.concert_scan.ffc_setup.flat_position = self.ffc_controls_group.radio_position
+        self.concert_scan.acq_setup.num_flats = self.ffc_controls_group.num_flats
+        self.concert_scan.acq_setup.num_darks = self.ffc_controls_group.num_darks
 
         # POPULATE THE LIST OF ACQUSITIONS
         acquisitions = []
         # ffc before
         if self.scan_controls_group.ffc_before:
-            acquisitions.append(self.concert_scan.acq_setup.dummy_flat_acq)
-        # if self.ffc_controls_group.num_darks>0:
-        #     self.concert_scan.exp.add(self.concert_scan.exp.darks_softr)
+            acquisitions.append(self.concert_scan.acq_setup.dummy_flat0_acq)
+            if self.ffc_controls_group.num_darks>0:
+                acquisitions.append(self.concert_scan.acq_setup.dummy_dark_acq)
+        acquisitions.append(self.concert_scan.acq_setup.dummy_tomo_acq)
         # projections
-        if self.scan_controls_group.inner_cont is False:
-            if self.camera_controls_group.buffered is False:
-                acquisitions.append(self.concert_scan.acq_setup.tomo_softr_notbuf)
-            if self.camera_controls_group.buffered is True:
-                acquisitions.append(self.concert_scan.acq_setup.tomo_softr_buf)
+        # if self.scan_controls_group.inner_cont is False:
+        #     if self.camera_controls_group.buffered is False:
+        #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr_notbuf)
+        #     if self.camera_controls_group.buffered is True:
+        #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr_buf)
         # ffc after
-        # if self.scan_controls_group.ffc_after:
-        #     self.concert_scan.exp.add(self.scan_controls_group.flats_softr)
-        # if self.ffc_controls_group.num_darks>0:
-        #     self.concert_scan.exp.add(self.concert_scan.exp.darks_softr)
-
+        if self.scan_controls_group.ffc_after:
+            acquisitions.append(self.scan_controls_group.acq_setup.dummy_flat1_acq)
 
         # CREATE NEW WALKER
         if self.file_writer_group.isChecked():
@@ -343,6 +343,10 @@ class GUI(QDialog):
         self.concert_scan.create_experiment(acquisitions,
                                             self.file_writer_group.ctsetname,
                                             self.file_writer_group.separate_scans)
+        n=0
+        for i in self.concert_scan.exp.acquisitions:
+            n+=1
+        info_message("{:}".format(n))
 
         # FINALLY ATTACH CONSUMERS
         if self.file_writer_group.isChecked():

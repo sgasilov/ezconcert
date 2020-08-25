@@ -84,7 +84,7 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_start_entry = QLineEdit()
         self.inner_loop_start_entry.setText("0")
         self.inner_loop_steps_entry = QLineEdit()
-        self.inner_loop_steps_entry.setText("20")
+        self.inner_loop_steps_entry.setText("5")
         self.inner_loop_range_entry = QLineEdit()
         self.inner_loop_range_entry.setText("10")
         self.inner_loop_endpoint = QCheckBox("Include")

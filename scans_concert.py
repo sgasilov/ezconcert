@@ -155,10 +155,12 @@ class ACQsetup(object):
         self.ffc_motor = None
         self.outer_motor = None
         # acquisitions
+        self.dummy_flat0_acq = Acquisition('dummy_flat_before', self.take_dummy_flats)
+        self.dummy_flat1_acq = Acquisition('dummy_flat_after', self.take_dummy_flats)
+        self.dummy_tomo_acq = Acquisition('dummy_tomo', self.take_dummy_tomo)
+        self.dummy_dark_acq = Acquisition('dummy_dark', self.take_dummy_darks)
         self.flats_softr = Acquisition('flats', self.take_flats_softr)
         self.darks_softr = Acquisition('darks', self.take_darks_softr)
-        self.dummy_flat_acq = Acquisition('dummy_flat', self.take_dummy)
-        self.dummy_tomo_acq = Acquisition('dummy_tomo', self.take_dummy)
         self.tomo_softr_notbuf = Acquisition('tomo', self.take_tomo_softr_notbuf)
         self.tomo_softr_buf = Acquisition('tomo', self.take_tomo_softr_buf)
         self.acquisitions = []
@@ -191,14 +193,27 @@ class ACQsetup(object):
         #self.x = self.inner_start * self.inner_units
         #self.inner_motor.position.set(self.x).join()
 
-        for i in range(11):
+        for i in range(self.inner_nsteps):
             yield self.camera.grab()
             sleep(0.5)
 
         #return frames(self.inner_nsteps, self.camera, callback=self.move)
 
-    def take_dummy(self):
-        for i in range(11):
+    def take_dummy_tomo(self):
+        #self.x = self.inner_start * self.inner_units
+        #self.inner_motor.position.set(self.x).join()
+
+        for i in range(self.inner_nsteps):
+            yield self.camera.grab()
+            sleep(0.5)
+
+    def take_dummy_flats(self):
+        for i in range(self.num_flats):
+            yield self.camera.grab()
+            sleep(0.5)
+
+    def take_dummy_darks(self):
+        for i in range(self.num_darks):
             yield self.camera.grab()
             sleep(0.5)
 
