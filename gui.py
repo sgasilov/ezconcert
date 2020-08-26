@@ -22,14 +22,9 @@ from concert.session.utils import ddoc, dstate, pdoc, code_of, abort
 LOG = logging.getLogger(__name__)
 
 from concert.ext.viewers import PyplotImageViewer
-from concert.experiments.imaging import frames
 from concert.storage import DirectoryWalker
-from concert.experiments.addons import ImageWriter
-from concert.experiments.addons import Consumer
-from concert.experiments.base import Acquisition, Experiment
 from concert.session.utils import abort
 from concert.devices.base import abort as device_abort
-from concert.coroutines.base import coroutine, inject
 
 #import asyncio
 from scans_concert import ConcertScanThread
@@ -72,7 +67,8 @@ class GUI(QDialog):
         self.scan_status_update_timer.timeout.connect(self.check_scan_status)
 
         # EXECUTION CONTROL BUTTONS
-        self.getflatsdarks_button = QPushButton("ACQUIRE FLATS AND DARKS")
+        self.getflatsdarks_button = QPushButton("ACQUIRE FLATS/DARKS")
+        self.get180pair_button = QPushButton("GET 180 PAIR")
         self.getflatsdarks_button.clicked.connect(self.getflatsdarks)
         self.start_button = QPushButton("START")
         self.start_button.clicked.connect(self.start)
@@ -133,7 +129,8 @@ class GUI(QDialog):
         self.file_writer_group = FileWriterGroup(title="File-writer settings")
         self.file_writer_group.setEnabled(False)
         self.ring_status_group = RingStatusGroup(title="Ring status")
-        self.scan_controls_group = ScanControlsGroup(self.start_button, self.abort_button, self.return_button, self.scan_fps_entry,
+        self.scan_controls_group = ScanControlsGroup(self.start_button, self.abort_button, self.return_button,
+                                                     self.scan_fps_entry, self.getflatsdarks_button, self.get180pair_button,
                                                      self.motor_inner, self.motor_outer, title="Scan controls")
         self.scan_controls_group.setEnabled(False)
         # Thread for concert scan
@@ -248,53 +245,113 @@ class GUI(QDialog):
         self.ffc_controls_group.setEnabled(True)
         self.file_writer_group.setEnabled(True)
 
+
     def start(self):
         self.start_button.setEnabled(False)
         self.abort_button.setEnabled(True)
         self.return_button.setEnabled(False)
+        # before starting scan we have to create new experiment
+        # and update parameters
+        # of acquisitions, flat-field correction, camera, consumers, etc
+        # based on the user input
+        self.set_scan_params()
+        self.scan_controls_group.setTitle("Scan controls. Status: Scan is running")
+        #self.scan_controls_group.setStyleSheet('QGroupBox:title {"font-weight: bold; color: green"}')
         self.concert_scan.start_scan()
+        # must inform users if there is an attempt to overwrite data
+        # that is ctsetname is not a pattern and its name has'not been change
+        # since the last run. Data cannot be overwritten, but
+        # Experiment will simply quite without any warnings
 
-    # def start(self):
-    #     #info_message("Scan started")
-    #     self.walker = DirectoryWalker(root=self.file_writer_group.root_dir, \
-    #                                   dsetname=self.file_writer_group.dsetname)
-    #
-    #     # self.setup = FFC(self.shutter, self.motor_flat, \
-    #     #                    self.ffc_controls_group.flat_position, self.ffc_controls_group.radio_position)
-    #     #
-    #     # self.scan = Radiography(self.camera, self.setup, \
-    #     #                         num_darks=self.ffc_controls_group.num_darks,
-    #     #                         num_flats=self.ffc_controls_group.num_flats)
-    #
-    #     #flats = Acquisition('flats', self.take_images(5))
-    #     flats = Acquisition('flats', self.take_flats())
-    #     acquisitions = [flats]
-    #     self.scan = Experiment([flats])
-    #     #live = Consumer(acquisitions, self.viewer())
-    #
-    #
-    #     # yield self.camera.grab()
-    #
-    #     # Connecting writer and live-preview
-    #     #self.writer = ImageWriter(self.scan.acquisitions, self.walker, async=True)
-    #     #live = Consumer(self.scan.acquisitions, self.viewer())
-    #
-    #     #info_message("Image std {:0.2f}".format(np.std(self.camera.grab())))
-    #     #test(self.camera)
-    #
-    #     self.start_button.setEnabled(False)
-    #     self.abort_button.setEnabled(True)
-    #     self.return_button.setEnabled(False)
-    #     #info_message("Scan ON")
-    #     self.scan_status_update_timer.start()
-    #     self.f = self.scan.run()
-    #     #inject((self.camera.grab() for i in range(100)), self.viewer())
-    #     #inject((self.camera.grab() for i in range(100)), self.writer())
-    #     #sleep(5)
-    #     self.end_of_scan()
-    #
-    #     #self.scan_thread.scan_running = True
-    #     #info_message("Scan finished")
+    def set_scan_params(self):
+        '''To be called before Experiment.run
+           We create new instance of Concert Experiment and set all
+           parameters required for correct data acquisition'''
+
+        # SET CAMERA PARAMETER
+        # since reference to libuca object was getting lost and camera is passed
+        # though a signal, its parameters are changed by means of a function rather
+        # then directly setting them from GUI
+        self.concert_scan.set_camera_params(self.camera_controls_group.trig_mode,
+                                            self.camera_controls_group.acq_mode,
+                                            self.camera_controls_group.buffered,
+                                            self.camera_controls_group.buffnum,
+                                            self.camera_controls_group.exp_time,
+                                            self.camera_controls_group.roi_x0,
+                                            self.camera_controls_group.roi_width,
+                                            self.camera_controls_group.roi_y0,
+                                            self.camera_controls_group.roi_height)
+
+        #### SET ACQUISION PARAMETERS
+        # Times as floating point numbers [msec] to compute the CT stage motion
+        self.concert_scan.acq_setup.dead_time = self.camera_controls_group.dead_time
+        self.concert_scan.acq_setup.exp_time = self.camera_controls_group.exp_time
+        # Inner motor and scan intervals
+        self.concert_scan.acq_setup.inner_motor = self.motors[self.scan_controls_group.inner_motor]
+        self.concert_scan.acq_setup.inner_cont = self.scan_controls_group.inner_cont
+        self.concert_scan.acq_setup.inner_start = self.scan_controls_group.inner_start
+        self.concert_scan.acq_setup.inner_nsteps = self.scan_controls_group.inner_steps
+        self.concert_scan.acq_setup.inner_range = self.scan_controls_group.inner_range
+        self.concert_scan.acq_setup.inner_endp = self.scan_controls_group.inner_endpoint
+        # Outer motor and scan intervals
+
+        #### SET FFC parameters
+        self.concert_scan.ffc_setup.shutter = self.shutter
+        try:
+            self.concert_scan.ffc_setup.flat_motor = self.motors[self.ffc_controls_group.flat_motor]
+        except:
+            pass # if ffc is requested show error in case if motor is not selected
+        self.concert_scan.ffc_setup.radio_position = self.ffc_controls_group.radio_position
+        self.concert_scan.ffc_setup.flat_position = self.ffc_controls_group.radio_position
+        self.concert_scan.acq_setup.num_flats = self.ffc_controls_group.num_flats
+        self.concert_scan.acq_setup.num_darks = self.ffc_controls_group.num_darks
+
+        # POPULATE THE LIST OF ACQUSITIONS
+        acquisitions = []
+        # ffc before
+        if self.scan_controls_group.ffc_before:
+            acquisitions.append(self.concert_scan.acq_setup.dummy_flat0_acq)
+            if self.ffc_controls_group.num_darks>0:
+                acquisitions.append(self.concert_scan.acq_setup.dummy_dark_acq)
+        acquisitions.append(self.concert_scan.acq_setup.dummy_tomo_acq)
+        # projections
+        # if self.scan_controls_group.inner_cont is False:
+        #     if self.camera_controls_group.buffered is False:
+        #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr_notbuf)
+        #     if self.camera_controls_group.buffered is True:
+        #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr_buf)
+        # ffc after
+        if self.scan_controls_group.ffc_after:
+            acquisitions.append(self.scan_controls_group.acq_setup.dummy_flat1_acq)
+
+        # CREATE NEW WALKER
+        if self.file_writer_group.isChecked():
+            self.concert_scan.walker = DirectoryWalker(root=self.file_writer_group.root_dir,
+                                 dsetname=self.file_writer_group.dsetname)
+        else:
+            # if writer is disabled we do not need walker as well
+            self.concert_scan.walker = None
+
+        # WE MUST DETACH OLD WRITER IF IT EXISTS
+        try:
+            self.concert_scan.cons_writer.detach()
+            self.concert_scan.cons_viewer.detach()
+        except:
+            pass
+
+        # CREATE NEW INSTANCE OF CONCERT EXPERIMENT
+        self.concert_scan.create_experiment(acquisitions,
+                                            self.file_writer_group.ctsetname,
+                                            self.file_writer_group.separate_scans)
+        n=0
+        for i in self.concert_scan.exp.acquisitions:
+            n+=1
+        info_message("{:}".format(n))
+
+        # FINALLY ATTACH CONSUMERS
+        if self.file_writer_group.isChecked():
+            self.concert_scan.attach_writer()
+        self.concert_scan.attach_viewer()
 
     def abort(self):
         self.concert_scan.abort_scan()
@@ -309,7 +366,9 @@ class GUI(QDialog):
         #abort()
         # use motor list to abort
         device_abort(m for m in self.motors.values() if m is not None)
-        info_message("Scan aborted")
+        #info_message("Scan aborted")
+        self.scan_controls_group.setTitle("Scan controls. Status: scan was aborted by user")
+        #self.scan_controls_group.setStyleSheet('QGroupBox:title {"font-weight: bold; color: orange"}')
         #self.scan_thread.scan_running = False
 
     def end_of_scan(self):
@@ -318,74 +377,24 @@ class GUI(QDialog):
 
         #### This section runs only if scan was finished normally, but not aborted ###
         if not self.return_button.isEnabled():
-            info_message("Scan finished")
+            #info_message("Scan finished")
+            self.scan_controls_group.setTitle("Scan controls. Status: scan was finished without errors")
+            #self.scan_controls_group.setStyleSheet('QGroupBox:title {"font-weight: bold; color: green"}')
+
         #### End of section
 
         # info_message("Scan finished, future state{}, yielded {} times".format(self.f.done(), self.tmp))
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
 
-    def update_all_cam_params(self):
-        ''' updates camera parameter with value in GUI entries'''
-        self.camera.exposure_time = self.camera_controls_group.exp_time
-        #root_dir = self.file_writer_group.root_dir_entry.text()
-        #return exp_time, root_dir
-
-    def check_parameters(self):
-        # Just checking type conversion here
-        try:
-            self.inner_loop_steps()
-            self.outer_loop_steps()
-        except ValueError:
-            return False
-        return True
-
     # EXECUTION CONTROL
     def check_scan_status(self):
         if self.f.done():
             self.end_of_scan()
 
-    def move(self,motor):
-        """Move to the next step."""
-        step = 1
-        motor.x += step
-        motor.param.set(motor.x).join()
-
-    def take_images(self, nframes, cback=None):
-        #info_message("I'm inside acqusition")
-        if self.camera.state == 'recording':
-            self.camera.stop_recording()
-
-        self.camera['trigger_source'].stash().join()
-        self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
-
-        self.tmp = 0
-        try:
-            with self.camera.recording():
-                for i in range(nframes):
-                    self.camera.trigger()
-                    yield self.camera.grab()
-                    self.tmp += 1
-                    #if cback:
-                    #    cback()
-        finally:
-            self.camera['trigger_source'].restore().join()
-
-        #return frames(nframes, self.camera, callback=cback)
-
-    @coroutine
-    def mystd(self):
-        while True:
-            im = yield
-            info_message("Image std {:0.2f}".format(np.std(im)))
-            # print "STD {:0.2f}".format(np.std(im))
-
-
-
     def return_to_position(self):
         info_message("Returning to position...")
-        result = return_to_position_dummy()
-        info_message(result)
+        #info_message(result)
 
     def getflatsdarks(self):
         info_message("Acquiring flats and darks")

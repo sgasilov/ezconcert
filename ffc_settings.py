@@ -29,11 +29,11 @@ class FFCSettingsGroup(QGroupBox):
         self.numflats_label = QLabel()
         self.numflats_label.setText("Num of flats")
         self.numflats_entry = QLineEdit()
-        self.numflats_entry.setText("10")
+        self.numflats_entry.setText("2")
         self.numdarks_label = QLabel()
         self.numdarks_label.setText("Num of darks")
         self.numdarks_entry = QLineEdit()
-        self.numdarks_entry.setText("10")
+        self.numdarks_entry.setText("2")
 
         # acquire button and motor position indicators
         self.getflatsdarks_button = guibutton
@@ -63,7 +63,7 @@ class FFCSettingsGroup(QGroupBox):
     @property
     def flat_motor(self):
         try:
-            return self.motor_options_entry.text()
+            return self.motor_options_entry.currentText()
         except ValueError:
             return None
     @property

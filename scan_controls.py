@@ -27,7 +27,8 @@ class ScanControlsGroup(QGroupBox):
     Camera controls
     """
 
-    def __init__(self, start_button, abort_button, return_button, scan_fps_entry,
+    def __init__(self, start_button, abort_button, return_button,
+                 scan_fps_entry, ffc_button, p180_button,
                  motor_inner, motor_outer, *args, **kwargs):
         super(ScanControlsGroup, self).__init__(*args, **kwargs)
         # Timer - just as example
@@ -41,6 +42,8 @@ class ScanControlsGroup(QGroupBox):
         self.start_button = start_button
         self.abort_button = abort_button
         self.return_button = return_button
+        self.ffc_button = ffc_button
+        self.p180_button = p180_button
         # FPS indicator
         self.scan_fps_label = QLabel()
         self.scan_fps_label.setText("Average fps")
@@ -70,6 +73,7 @@ class ScanControlsGroup(QGroupBox):
         self.outer_loop_range_entry = QLineEdit()
         self.outer_loop_endpoint = QCheckBox("Include")
         self.outer_loop_continuous = QCheckBox("CONTINUOUS")
+        self.outer_loop_continuous.setChecked(False)
 
         # Inner loop
         self.inner_loop_label = QLabel()
@@ -80,12 +84,13 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_start_entry = QLineEdit()
         self.inner_loop_start_entry.setText("0")
         self.inner_loop_steps_entry = QLineEdit()
-        self.inner_loop_steps_entry.setText("2000")
+        self.inner_loop_steps_entry.setText("5")
         self.inner_loop_range_entry = QLineEdit()
-        self.inner_loop_range_entry.setText("180")
+        self.inner_loop_range_entry.setText("10")
         self.inner_loop_endpoint = QCheckBox("Include")
         self.inner_loop_flats_1 = QCheckBox("FLATS AFTER")
         self.inner_loop_continuous = QCheckBox("CONTINUOUS")
+        self.inner_loop_continuous.setChecked(False)
         self.set_layout()
 
     def set_layout(self):
@@ -94,6 +99,9 @@ class ScanControlsGroup(QGroupBox):
         layout.addWidget(self.start_button, 0, 0, 1, 2)
         layout.addWidget(self.abort_button, 0, 2, 1, 2)
         layout.addWidget(self.return_button, 0, 4, 1, 2)
+        layout.addWidget(self.scan_fps_label, 0, 6)
+        layout.addWidget(self.ffc_button, 0, 7)
+        layout.addWidget(self.p180_button, 0, 8)
 
         # Top labels
         layout.addWidget(self.motor_label, 1, 1)
@@ -129,37 +137,49 @@ class ScanControlsGroup(QGroupBox):
         self.setLayout(layout)
 
     @property
-    def steps(self):
+    def inner_motor(self):
+        try:
+            return self.inner_loop_motor.currentText()
+        except ValueError:
+            return None
+
+    @property
+    def inner_steps(self):
         try:
             return int(self.inner_loop_steps_entry.text())
         except ValueError:
             return None
 
     @property
-    def start(self):
+    def inner_start(self):
         try:
             return float(self.inner_loop_start_entry.text())
         except ValueError:
             return None
 
     @property
-    def range(self):
+    def inner_range(self):
         try:
-            return int(self.inner_loop_range.text())
+            return int(self.inner_loop_range_entry.text())
         except ValueError:
             return None
 
-    def outer_loop_steps(self):
-        return int(self.outer_loop_steps_entry.text())
+    @property
+    def inner_endpoint(self):
+        return self.inner_loop_endpoint.isChecked()
 
-    def check_parameters(self):
-        # Just checking type conversion here
-        try:
-            self.inner_loop_steps()
-            self.outer_loop_steps()
-        except ValueError:
-            return False
-        return True
+    @property
+    def ffc_before(self):
+        return self.inner_loop_flats_0.isChecked()
+
+    @property
+    def ffc_after(self):
+        return self.inner_loop_flats_1.isChecked()
+
+    @property
+    def inner_cont(self):
+        return self.inner_loop_continuous.isChecked()
+
 
 
 

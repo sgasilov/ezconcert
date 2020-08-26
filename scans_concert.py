@@ -9,7 +9,6 @@ from time import sleep
 from concert.async import async, wait
 from concert.base import identity
 from concert.quantities import q
-from concert.networking.base import get_tango_device
 from concert.experiments.base import Acquisition, Experiment
 from concert.experiments.imaging import (tomo_projections_number, tomo_max_speed, frames)
 from concert.devices.cameras.base import CameraError
@@ -17,8 +16,9 @@ from concert.devices.cameras.pco import Timestamp
 from concert.devices.cameras.uca import Camera as UcaCamera
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject
 from concert.coroutines.base import coroutine, inject
-from concert.experiments.addons import Consumer
+from concert.experiments.addons import Consumer, ImageWriter
 from message_dialog import info_message
+from concert.storage import DirectoryWalker
 import numpy as np
 
 
@@ -30,8 +30,9 @@ def run(n, callback):
 
 class ConcertScanThread(QThread):
     """
-    Creates Concert Experiment
-    from Concert Acqusitions
+    Holds camera+viewer+viewer consumer and walker+write consumers
+    Creates Concert Experiment and attaches consumers to it
+    Acqusitions are selected from a collection of acquisitions predefined in Radiography class
     Acquisitons are functions which move motors and control camera
     Experiment can be run multiple times, a viewer and a file-writer are attached to it
     Parameters of Camera must be defined before calling Scan
@@ -39,18 +40,49 @@ class ConcertScanThread(QThread):
     scan_finished_signal = pyqtSignal()
     data_changed_signal = pyqtSignal(str)
 
-    def __init__(self, viewer, camera, flat_motor=None, inner_motor=None):
+    def __init__(self, viewer, camera):
         super(ConcertScanThread, self).__init__()
         self.viewer = viewer
         self.camera = camera
-        self.ffcsetup = FFCsetup()
+        self.ffc_setup = FFCsetup()
+        self.acq_setup = ACQsetup(self.camera, self.ffc_setup) # Collection of acqusitions we create it once
+        self.exp = None # That is experiment. We create it each time before run is pressed
+        # before that all camera, acquisition, and ffc parameters must be set according to the
+        # user input and consumers must be attached
+        self.cons_viewer = None
+        self.cons_writer = None
         self.thread_running = True
         atexit.register(self.stop)
         self.starting_scan = False
-        self.exp = Radiography(self.camera, self.ffcsetup)
-        self.cons = Consumer(self.exp.acquisitions, self.viewer)
-        # self.cons = Consumer(self.exp.acquisitions, self.on_data_changed)
         self.running_experiment = None
+
+    def create_experiment(self, acquisitions, ctsetname, sep_scans):
+        self.exp = Experiment(acquisitions=acquisitions, \
+                              walker=self.walker, separate_scans=sep_scans, name_fmt=ctsetname)
+
+    def attach_writer(self, async=True):
+        self.cons_writer = ImageWriter(self.exp.acquisitions, self.walker, async=async)
+
+    def attach_viewer(self):
+        self.cons_viewer = Consumer(self.exp.acquisitions, self.viewer)
+
+    def set_camera_params(self, trig_mode, acq_mode,
+                          buf, bufnum,
+                          exp_time, x, width, y, height):
+        try:
+            self.setup.camera.trigger_source = trig_mode
+            self.setup.camera.acquire_mode = acq_mode
+            # if camera.acquire_mode != camera.uca.enum_values.acquire_mode.EXTERNAL:
+            #     raise ValueError('Acquire mode must be set to EXTERNAL')
+            # if camera.trigger_source != camera.trigger_sources.AUTO:
+            #     raise ValueError('Trigger mode must be set to AUTO')
+        except:
+            pass
+        self.camera.buffered = buf
+        self.camera.num_buffers = bufnum
+        self.camera.exposure_time = exp_time * q.msec
+
+
 
     def stop(self):
         self.thread_running = False
@@ -92,48 +124,113 @@ class ConcertScanThread(QThread):
             self.data_changed_signal.emit("{:0.3f}".format(np.std(im)))
 
 
-class Radiography(Experiment):
+class ACQsetup(object):
 
-    """A set of devices and acquisitions allowing to acquire radiograms with and without beam.
-    .. attribute:: num_darks
-    .. attribute:: num_flats
-        Number of flat fields to acquire
-    .. attribute:: radio_producer
-        A callable which returns a generator which yields radiograms
+    """This is Class which holds a collection of acqusitions
+    (each acquisition moves motors and get frames from camera)
+    and all parameters which acqusitions require
     """
 
-    def __init__(self, camera, FFCsetup, walker=None, separate_scans=True, num_darks=0, num_flats=0,
-                 radio_producer=None, callback=None):
-        self.ffcsetup = FFCsetup
+    def __init__(self, camera, ffcsetup):
+        self.ffcsetup = ffcsetup
         self.camera = camera
-        self.num_darks = num_darks
-        self.num_flats = num_flats
-        self.radio_producer = radio_producer
-        self.mainguicallback = callback
-        # acquititions
-        flats = Acquisition('flats', self.take_flats)
-        acquisitions = [flats]
-        #if darks_chackbox
-        #    acquisitions.append(darks)
-        #if flat_before:
-            #acquisitions.append(flats)
-        super(Radiography, self).__init__(acquisitions, walker=walker,
-                                          separate_scans=separate_scans)
+        self.num_darks = 0
+        self.num_flats = 0
+        #self.radio_producer = radio_producer
+        #self.mainguicallback = callback
+        # physical parameters
+        self.exp_time = 0.0
+        self.dead_time = 0.0
+        self.inner_motor = None
+        self.inner_units = None
+        self.inner_start = 0.0
+        self.inner_nsteps = 0
+        self.inner_range = 0.0
+        self.inner_endp = False
+        self.inner_step = 0.0
+        self.inner_cont = False
+        self.inner_scan_param = None
+        self.inner_units = q.mm
+        self.x = None
+        self.ffc_motor = None
+        self.outer_motor = None
+        # acquisitions
+        self.dummy_flat0_acq = Acquisition('dummy_flat_before', self.take_dummy_flats)
+        self.dummy_flat1_acq = Acquisition('dummy_flat_after', self.take_dummy_flats)
+        self.dummy_tomo_acq = Acquisition('dummy_tomo', self.take_dummy_tomo)
+        self.dummy_dark_acq = Acquisition('dummy_dark', self.take_dummy_darks)
+        self.flats_softr = Acquisition('flats', self.take_flats_softr)
+        self.darks_softr = Acquisition('darks', self.take_darks_softr)
+        self.tomo_softr_notbuf = Acquisition('tomo', self.take_tomo_softr_notbuf)
+        self.tomo_softr_buf = Acquisition('tomo', self.take_tomo_softr_buf)
+        self.acquisitions = []
+        self.exp = None
+        #super(Radiography, self).__init__(self.acq, walker=walker,
+        #                                  separate_scans=sep_scans,
+        #                                  name_fmt=name_fmt)
 
-    def take_flats(self):
-        # print("Before first yield")
-        # yield self.camera.grab()
-        # sleep(2)
-        # print("I'm here'!")
-        # yield self.camera.grab()
-        for i in range(15):
+    def prepare(self):
+        if self.inner_endp:
+            #step = (self.maximum - self.minimum) / float(self.intervals - 1)
+            self.inner_step = self.inner_range / float(self.inner_nsteps - 1)
+        else:
+            self.inner_step = self.inner_range / float(self.inner_nsteps)
+        self.inner_scan_param = self.inner_motor['position']
+
+    def finish(self, block=True):
+        self.x = self.inner_start * self.inner_units
+        if block:
+            self.inner_scan_param.set(self.x).join()
+        else:
+            self.inner_scan_param.set(self.x)
+
+    def move(self):
+        """Move to the next step."""
+        self.x += self.inner_step * self.inner_units
+        self.inner_scan_param.set(self.x).join()
+
+    def take_tomo_softr_notbuf(self):
+        #self.x = self.inner_start * self.inner_units
+        #self.inner_motor.position.set(self.x).join()
+
+        for i in range(self.inner_nsteps):
             yield self.camera.grab()
             sleep(0.5)
-            #self.mainguicallback(i)
-            #info_message("Image std {:0.2f}".format(np.std(self.camera.grab())))
-            #yield self.camera.grab()
 
+        #return frames(self.inner_nsteps, self.camera, callback=self.move)
 
+    def take_dummy_tomo(self):
+        #self.x = self.inner_start * self.inner_units
+        #self.inner_motor.position.set(self.x).join()
+
+        for i in range(self.inner_nsteps):
+            yield self.camera.grab()
+            sleep(0.5)
+
+    def take_dummy_flats(self):
+        for i in range(self.num_flats):
+            yield self.camera.grab()
+            sleep(0.5)
+
+    def take_dummy_darks(self):
+        for i in range(self.num_darks):
+            yield self.camera.grab()
+            sleep(0.5)
+
+    def take_tomo_softr_buf(self):
+        for i in range(self.num_flats):
+            yield self.camera.grab()
+            sleep(0.5)
+
+    def take_flats_softr(self):
+        for i in range(self.num_flats):
+            yield self.camera.grab()
+            sleep(0.5)
+
+    def take_darks_softr(self):
+        for i in range(self.num_darks):
+            yield self.camera.grab()
+            sleep(0.5)
 
 class FFCsetup(object):
 
@@ -141,13 +238,15 @@ class FFCsetup(object):
     Written by Tomas Farago, KIT
     Imaging experiments setup holds necessary devices and settings
     to perform flat-field correction.
+    We create this object once but must update parameters according to the input
+    each time before experiment is run
     """
 
-    def __init__(self, shutter = None, flat_motor=None, flat_position=None, radio_position=None):
+    def __init__(self, shutter = None):
         self.shutter = shutter
-        self.flat_motor = flat_motor
-        self.flat_position = flat_position
-        self.radio_position = radio_position
+        self.flat_motor = None
+        self.flat_position = 0.0
+        self.radio_position = 0.0
 
     def _manipulate_shutter(self, desired_state, block=True):
         future = None
