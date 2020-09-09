@@ -17,7 +17,7 @@ from concert.devices.cameras.uca import Camera as UcaCamera
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject
 from concert.coroutines.base import coroutine, inject
 from concert.experiments.addons import Consumer, ImageWriter
-from message_dialog import info_message
+from message_dialog import info_message, error_message, warning_message
 from concert.storage import DirectoryWalker
 import numpy as np
 
@@ -68,18 +68,23 @@ class ConcertScanThread(QThread):
 
     def set_camera_params(self, trig_mode, acq_mode,
                           buf, bufnum,
-                          exp_time, x, width, y, height):
+                          exp_time, x0, width, y0, height):
         try:
-            self.setup.camera.trigger_source = trig_mode
-            self.setup.camera.acquire_mode = acq_mode
+            self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+            self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
+            self.camera.buffered = buf
+            self.camera.num_buffers = bufnum
+            self.camera.roi_x0 = x0 * q.pixels
+            self.camera.roi_y0 = y0 * q.pixels
+            self.camera.roi_width = width * q.pixels
+            self.camera.roi_height = height * q.pixels
             # if camera.acquire_mode != camera.uca.enum_values.acquire_mode.EXTERNAL:
             #     raise ValueError('Acquire mode must be set to EXTERNAL')
             # if camera.trigger_source != camera.trigger_sources.AUTO:
             #     raise ValueError('Trigger mode must be set to AUTO')
         except:
-            pass
-        self.camera.buffered = buf
-        self.camera.num_buffers = bufnum
+            info_message("Can't set camera parameters")
+
         self.camera.exposure_time = exp_time * q.msec
 
 
@@ -116,12 +121,12 @@ class ConcertScanThread(QThread):
         except:
             pass
 
-    @coroutine
-    def on_data_changed(self):
-        while True:
-            im = yield
-            print("{:0.3f}".format(np.std(im)))
-            self.data_changed_signal.emit("{:0.3f}".format(np.std(im)))
+    # @coroutine
+    # def on_data_changed(self):
+    #     while True:
+    #         im = yield
+    #         print("{:0.3f}".format(np.std(im)))
+    #         self.data_changed_signal.emit("{:0.3f}".format(np.std(im)))
 
 
 class ACQsetup(object):
@@ -141,16 +146,16 @@ class ACQsetup(object):
         # physical parameters
         self.exp_time = 0.0
         self.dead_time = 0.0
-        self.inner_motor = None
-        self.inner_units = None
-        self.inner_start = 0.0
-        self.inner_nsteps = 0
-        self.inner_range = 0.0
-        self.inner_endp = False
-        self.inner_step = 0.0
-        self.inner_cont = False
-        self.inner_scan_param = None
-        self.inner_units = q.mm
+        self.motor = None
+        self.units = None
+        self.start = 0.0
+        self.nsteps = 0
+        self.range = 0.0
+        self.endp = False
+        self.step = 0.0
+        self.region = None
+        self.cont = False
+        self.units = q.mm
         self.x = None
         self.ffc_motor = None
         self.outer_motor = None
@@ -159,53 +164,114 @@ class ACQsetup(object):
         self.dummy_flat1_acq = Acquisition('dummy_flat_after', self.take_dummy_flats)
         self.dummy_tomo_acq = Acquisition('dummy_tomo', self.take_dummy_tomo)
         self.dummy_dark_acq = Acquisition('dummy_dark', self.take_dummy_darks)
-        self.flats_softr = Acquisition('flats', self.take_flats_softr)
+        self.flats0_softr = Acquisition('flats_before', self.take_flats_softr)
+        self.flats1_softr = Acquisition('flats_after', self.take_flats_softr)
         self.darks_softr = Acquisition('darks', self.take_darks_softr)
-        self.tomo_softr_notbuf = Acquisition('tomo', self.take_tomo_softr_notbuf)
+        self.tomo_softr = Acquisition('tomo', self.take_tomo_softr)
         self.tomo_softr_buf = Acquisition('tomo', self.take_tomo_softr_buf)
-        self.acquisitions = []
+        self.tomo_maw_acq = Acquisition('tomo', self.take_tomo_maw)
         self.exp = None
         #super(Radiography, self).__init__(self.acq, walker=walker,
         #                                  separate_scans=sep_scans,
         #                                  name_fmt=name_fmt)
 
-    def prepare(self):
-        if self.inner_endp:
-            #step = (self.maximum - self.minimum) / float(self.intervals - 1)
-            self.inner_step = self.inner_range / float(self.inner_nsteps - 1)
-        else:
-            self.inner_step = self.inner_range / float(self.inner_nsteps)
-        self.inner_scan_param = self.inner_motor['position']
+    ## HELPER FUNCTIONS
 
-    def finish(self, block=True):
-        self.x = self.inner_start * self.inner_units
-        if block:
-            self.inner_scan_param.set(self.x).join()
+    def calc_step(self):
+        if self.endp:
+            self.region = np.linspace(self.start, self.range, self.nsteps) * self.units
+            #self.step = self.range / float(self.nsteps - 1)
         else:
-            self.inner_scan_param.set(self.x)
+            self.region = np.linspace(self.start, self.range, self.nsteps, False) * self.units
+            #self.step = self.range / float(self.nsteps)
+        self.step = self.region[1]-self.region[0]
+
+    def finish(self):
+        self.x = self.start * self.units
+        #if block:
+        self.scan_param.set(self.x).join()
+        #else:
+        #    self.scan_param.set(self.x)
 
     def move(self):
         """Move to the next step."""
-        self.x += self.inner_step * self.inner_units
-        self.inner_scan_param.set(self.x).join()
+        self.x += self.step * self.units
+        self.motor['position'].set(self.x).join()
 
-    def take_tomo_softr_notbuf(self):
-        #self.x = self.inner_start * self.inner_units
-        #self.inner_motor.position.set(self.x).join()
+    def take_with_beam(self, generator_caller):
+        """A generator which yields frames with the shutter open. *generator_caller*
+        is a callable which returns a generator yielding frames.
+        """
+        #self.ffcsetup.open_shutter()
+        try:
+            for frame in generator_caller():
+                yield frame
+        except:
+            info_message('Error acquiring images with beam')
+        #finally:
+        #    self.ffcsetup.shutter.close().join()
 
-        for i in range(self.inner_nsteps):
+    def take_radios(self):
+        """A generator which yields radiograms."""
+        self.ffcsetup.prepare_radios()
+        return self.take_with_beam(self.radio_producer)
+
+    def take_darks_softr(self):
+        """A generator which yields dark fields."""
+        self.ffcsetup.close_shutter()
+        return frames(self.num_darks, self.camera)
+
+    def take_flats_softr(self):
+        """A generator which yields flat fields."""
+        self.ffcsetup.prepare_flats()
+        self.ffcsetup.open_shutter()
+        self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+        if self.camera.state == 'recording':
+            self.camera.stop_recording()
+        try:
+            with self.camera.recording():
+                for i in range(self.num_flats):
+                    self.camera.trigger()
+                    yield self.camera.grab()
+        except:
+            info_message("Something is wrong in take_flats_softr")
+        finally:
+            if self.camera.state == 'recording':
+                self.camera.stop_recording()
+        self.ffcsetup.close_shutter()
+        self.ffcsetup.prepare_radios()
+        #return
+
+    def take_tomo_softr(self):
+        self.ffcsetup.open_shutter()
+        if self.camera.state != 'recording':
+            self.camera.start_recording()
+        for pos in self.region:
+            self.motor['position'].set(pos).join()
+            self.camera.trigger()
             yield self.camera.grab()
-            sleep(0.5)
+        self.ffcsetup.close_shutter()
+        self.camera.stop_recording()
+    
+    def take_tomo_softr_buf(self):
+        self.ffcsetup.prepare_radios()
+        return self.take_with_beam(lambda: frames(self.num_flats, self.camera, callback=self.move))
 
-        #return frames(self.inner_nsteps, self.camera, callback=self.move)
-
+    ## DUMMY ACQUISIONS
     def take_dummy_tomo(self):
-        #self.x = self.inner_start * self.inner_units
-        #self.inner_motor.position.set(self.x).join()
-
-        for i in range(self.inner_nsteps):
-            yield self.camera.grab()
-            sleep(0.5)
+        try:
+            self.camera.start_recording()
+            for pos in self.region:
+                self.motor['position'].set(pos).join()
+        #    for i in range(5):
+                self.camera.trigger()
+                yield self.camera.grab()
+        except:
+            error_message("Something is wrong in dummy tomo acq")
+        finally:
+            self.camera.stop_recording()
+        #finally:
+        #self.motor.position.set(start).join()
 
     def take_dummy_flats(self):
         for i in range(self.num_flats):
@@ -217,25 +283,20 @@ class ACQsetup(object):
             yield self.camera.grab()
             sleep(0.5)
 
-    def take_tomo_softr_buf(self):
-        for i in range(self.num_flats):
+    def take_tomo_maw(self):
+        info_message("Starting...")
+        region = np.linspace(self.start, self.range, self.nsteps) * q.deg
+        for pos in region:
+            self.motor.position = pos
             yield self.camera.grab()
-            sleep(0.5)
+        info_message("...Done")
 
-    def take_flats_softr(self):
-        for i in range(self.num_flats):
-            yield self.camera.grab()
-            sleep(0.5)
 
-    def take_darks_softr(self):
-        for i in range(self.num_darks):
-            yield self.camera.grab()
-            sleep(0.5)
 
 class FFCsetup(object):
 
     """
-    Written by Tomas Farago, KIT
+    Provided by Tomas Farago, KIT
     Imaging experiments setup holds necessary devices and settings
     to perform flat-field correction.
     We create this object once but must update parameters according to the input
@@ -255,7 +316,6 @@ class FFCsetup(object):
             future = operation()
             if block:
                 future.join()
-
         return future
 
     def _manipulate_flat_motor(self, position, block=True):
@@ -264,7 +324,6 @@ class FFCsetup(object):
             future = self.flat_motor.set_position(position)
             if block:
                 future.join()
-
         return future
 
     def open_shutter(self, block=True):
@@ -281,10 +340,3 @@ class FFCsetup(object):
 
 
 
-
-        #print "STD {:0.2f}".format(np.std(im))
-
-def test(camera):
-    inject((camera.grab() for i in range(10)), mystd)
-    #for i in range(self.ffc_controls_group.num_flats):
-    #    yield camera.grab()

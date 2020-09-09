@@ -11,6 +11,7 @@ from message_dialog import info_message, error_message, warning_message
 from concert.devices.cameras.uca import Camera as UcaCamera
 from concert.devices.cameras.dummy import Camera as DummyCamera
 from concert.storage import write_tiff
+from concert.quantities import q
 import os.path as osp
 from matplotlib import pyplot as plt
 from concert.devices.cameras.base import CameraError
@@ -127,12 +128,13 @@ class CameraControlsGroup(QGroupBox):
         self.n_buffers_label = QLabel()
         self.n_buffers_label.setText("N BUFFERS")
         self.n_buffers_entry = QLineEdit()
+        self.n_buffers_entry.setText("0")
 
         # TRIGGER
         self.trigger_label = QLabel()
         self.trigger_label.setText("TRIGGER")
         self.trigger_entry = QComboBox()
-        self.trigger_entry.addItems(["AUTO", "EXTERNAL", "SOFTWARE"])
+        self.trigger_entry.addItems(["SOFTWARE", "AUTO", "EXTERNAL"])
 
         # ACQUISITION MODE
         self.acq_mode_label = QLabel()
@@ -323,11 +325,16 @@ class CameraControlsGroup(QGroupBox):
                 self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
             if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
                 self.camera.trigger_source = self.camera.trigger_sources.AUTO
-            self.camera.start_recording()
+            self.camera.buffered = False
+            self.camera.exposure_time = self.exp_time * q.msec
+            self.camera.roi_x0 = self.roi_x0 * q.pixels
+            self.camera.roi_y0 = self.roi_y0 * q.pixels
+            self.camera.roi_width = self.roi_width * q.pixels
+            self.camera.roi_height = self.roi_height * q.pixels
         except:
-            #if self.camera_model_label.text() != 'Dummy camera':
-            #    error_message("Cannot change acquisition mode and trigger source")
-            pass
+            if self.camera_model_label.text() != 'Dummy camera':
+                error_message("Cannot change acquisition mode or trigger source or ROI")
+        self.camera.start_recording()
         self.live_preview_thread.live_on = True
 
     def live_off_func(self):
