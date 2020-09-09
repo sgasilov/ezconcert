@@ -11,7 +11,7 @@ from ring_status import RingStatusGroup
 from scan_controls import ScanControlsGroup
 from message_dialog import info_message, error_message
 
-
+import time
 import logging
 import concert
 concert.require("0.11.0")
@@ -146,9 +146,12 @@ class GUI(QDialog):
 
         # connect to timer and shutter and populate lists of motors
         self.connect_time_motor_func()
-        #self.connect_shutter_func()
+        self.connect_shutter_func()
+
+        #self.scan_controls_group.inner_loop_flats_0.clicked.connect(self.add_buff)
 
         self.tmp = 0
+        self.nbuf = 0
         self.show()
 
     def set_layout_motor_control_group(self):
@@ -216,19 +219,18 @@ class GUI(QDialog):
 
     def connect_time_motor_func(self):
         try:
-            self.time_motor = SimMotor()
+            self.time_motor = SimMotor(1.0*q.mm)
         except:
             error_message("Can not connect to timer")
         if self.time_motor is not None:
             tmp = "Timer [sec]"
             self.motors[tmp] = self.time_motor
-            #self.motors[tmp] = self.motor_time
             self.scan_controls_group.inner_loop_motor.addItem(tmp)
             self.scan_controls_group.outer_loop_motor.addItem(tmp)
 
     def connect_shutter_func(self):
         try:
-            self.shutter = CLSShutter("FIS1605-2-01")
+            self.shutter = CLSShutter("ABRS1605-01:fis")
         except:
             error_message("Could not connect to fast imaging shutter, try again")
         if self.shutter is not None:
@@ -257,7 +259,10 @@ class GUI(QDialog):
         self.set_scan_params()
         self.scan_controls_group.setTitle("Scan controls. Status: Scan is running")
         #self.scan_controls_group.setStyleSheet('QGroupBox:title {"font-weight: bold; color: green"}')
+        #self.shutter.open()
+        #time.sleep(1.0)
         self.concert_scan.start_scan()
+        #self.shutter.close()
         # must inform users if there is an attempt to overwrite data
         # that is ctsetname is not a pattern and its name has'not been change
         # since the last run. Data cannot be overwritten, but
@@ -287,34 +292,42 @@ class GUI(QDialog):
         self.concert_scan.acq_setup.dead_time = self.camera_controls_group.dead_time
         self.concert_scan.acq_setup.exp_time = self.camera_controls_group.exp_time
         # Inner motor and scan intervals
-        self.concert_scan.acq_setup.inner_motor = self.motors[self.scan_controls_group.inner_motor]
-        self.concert_scan.acq_setup.inner_cont = self.scan_controls_group.inner_cont
-        self.concert_scan.acq_setup.inner_start = self.scan_controls_group.inner_start
-        self.concert_scan.acq_setup.inner_nsteps = self.scan_controls_group.inner_steps
-        self.concert_scan.acq_setup.inner_range = self.scan_controls_group.inner_range
-        self.concert_scan.acq_setup.inner_endp = self.scan_controls_group.inner_endpoint
+        self.concert_scan.acq_setup.motor = self.motors[self.scan_controls_group.inner_motor]
+        if self.scan_controls_group.inner_motor == 'CT stage [deg]':
+            self.concert_scan.acq_setup.units = q.deg
+        self.concert_scan.acq_setup.cont = self.scan_controls_group.inner_cont
+        self.concert_scan.acq_setup.start = self.scan_controls_group.inner_start
+        self.concert_scan.acq_setup.nsteps = self.scan_controls_group.inner_steps
+        self.concert_scan.acq_setup.range = self.scan_controls_group.inner_range
+        self.concert_scan.acq_setup.endp = self.scan_controls_group.inner_endpoint
+        self.concert_scan.acq_setup.calc_step()
+        #info_message("{:}".format(self.concert_scan.acq_setup.step))
         # Outer motor and scan intervals
+        # the outer motor scan be setup in the concert_scan to repeat exp multiple times
 
-        #### SET FFC parameters
+        #### SET shutter
         self.concert_scan.ffc_setup.shutter = self.shutter
-        try:
-            self.concert_scan.ffc_setup.flat_motor = self.motors[self.ffc_controls_group.flat_motor]
-        except:
-            pass # if ffc is requested show error in case if motor is not selected
-        self.concert_scan.ffc_setup.radio_position = self.ffc_controls_group.radio_position
-        self.concert_scan.ffc_setup.flat_position = self.ffc_controls_group.radio_position
-        self.concert_scan.acq_setup.num_flats = self.ffc_controls_group.num_flats
-        self.concert_scan.acq_setup.num_darks = self.ffc_controls_group.num_darks
+        #### SET FFC parameters
+        if self.scan_controls_group.ffc_before or self.scan_controls_group.ffc_after:
+            try:
+                self.concert_scan.ffc_setup.flat_motor = self.motors[self.ffc_controls_group.flat_motor]
+            except:
+                info_message("Select flat field motor to acquire flats")
+            self.concert_scan.ffc_setup.radio_position = self.ffc_controls_group.radio_position * q.mm
+            self.concert_scan.ffc_setup.flat_position = self.ffc_controls_group.radio_position * q.mm
+            self.concert_scan.acq_setup.num_flats = self.ffc_controls_group.num_flats
+            self.concert_scan.acq_setup.num_darks = self.ffc_controls_group.num_darks
 
         # POPULATE THE LIST OF ACQUSITIONS
         acquisitions = []
         # ffc before
         if self.scan_controls_group.ffc_before:
-            acquisitions.append(self.concert_scan.acq_setup.dummy_flat0_acq)
+            #acquisitions.append(self.concert_scan.acq_setup.dummy_flat0_acq)
+            acquisitions.append(self.concert_scan.acq_setup.flats0_softr)
             if self.ffc_controls_group.num_darks>0:
-                acquisitions.append(self.concert_scan.acq_setup.dummy_dark_acq)
-        acquisitions.append(self.concert_scan.acq_setup.dummy_tomo_acq)
+                acquisitions.append(self.concert_scan.acq_setup.darks_softr)
         # projections
+        acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
         # if self.scan_controls_group.inner_cont is False:
         #     if self.camera_controls_group.buffered is False:
         #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr_notbuf)
@@ -322,7 +335,7 @@ class GUI(QDialog):
         #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr_buf)
         # ffc after
         if self.scan_controls_group.ffc_after:
-            acquisitions.append(self.scan_controls_group.acq_setup.dummy_flat1_acq)
+            acquisitions.append(self.concert_scan.acq_setup.flats1_softr)
 
         # CREATE NEW WALKER
         if self.file_writer_group.isChecked():
@@ -343,15 +356,12 @@ class GUI(QDialog):
         self.concert_scan.create_experiment(acquisitions,
                                             self.file_writer_group.ctsetname,
                                             self.file_writer_group.separate_scans)
-        n=0
-        for i in self.concert_scan.exp.acquisitions:
-            n+=1
-        info_message("{:}".format(n))
 
         # FINALLY ATTACH CONSUMERS
         if self.file_writer_group.isChecked():
             self.concert_scan.attach_writer()
         self.concert_scan.attach_viewer()
+
 
     def abort(self):
         self.concert_scan.abort_scan()

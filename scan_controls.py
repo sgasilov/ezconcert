@@ -74,6 +74,7 @@ class ScanControlsGroup(QGroupBox):
         self.outer_loop_endpoint = QCheckBox("Include")
         self.outer_loop_continuous = QCheckBox("CONTINUOUS")
         self.outer_loop_continuous.setChecked(False)
+        self.outer_loop_continuous.setCheckable(False)
 
         # Inner loop
         self.inner_loop_label = QLabel()
@@ -89,7 +90,7 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_range_entry.setText("10")
         self.inner_loop_endpoint = QCheckBox("Include")
         self.inner_loop_flats_1 = QCheckBox("FLATS AFTER")
-        self.inner_loop_continuous = QCheckBox("CONTINUOUS")
+        self.inner_loop_continuous = QCheckBox("ON-THE-FLY")
         self.inner_loop_continuous.setChecked(False)
         self.set_layout()
 
