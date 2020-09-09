@@ -252,7 +252,7 @@ class ACQsetup(object):
             yield self.camera.grab()
         self.ffcsetup.close_shutter()
         self.camera.stop_recording()
-    
+
     def take_tomo_softr_buf(self):
         self.ffcsetup.prepare_radios()
         return self.take_with_beam(lambda: frames(self.num_flats, self.camera, callback=self.move))

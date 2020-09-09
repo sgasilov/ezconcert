@@ -83,6 +83,16 @@ class CameraControlsGroup(QGroupBox):
         self.delay_units = QLabel()
         self.delay_units.setText("msec")
 
+        #viewer limits
+        self.viewer_lowlim_label = QLabel()
+        self.viewer_lowlim_label.setText("Viewer low limit")
+        self.viewer_lowlim_entry = QLineEdit()
+        self.viewer_lowlim_entry.setText("100")
+        self.viewer_highlim_label = QLabel()
+        self.viewer_highlim_label.setText("Viewer high limit")
+        self.viewer_highlim_entry = QLineEdit()
+        self.viewer_highlim_entry.setText("1000")
+
         # ROI
         # y0
         self.roi_y0_label = QLabel()
@@ -166,12 +176,18 @@ class CameraControlsGroup(QGroupBox):
         layout.addWidget(self.camera_model_label, 1, 2)
         layout.addWidget(self.connect_to_dummy_camera_button, 1, 3)
 
-        layout.addWidget(self.exposure_label, 2, 0)
-        layout.addWidget(self.exposure_entry, 2, 1)
+        # viewer clims
+        layout.addWidget(self.viewer_lowlim_label, 2, 0)
+        layout.addWidget(self.viewer_lowlim_entry, 2, 1)
+        layout.addWidget(self.viewer_highlim_label, 2, 2)
+        layout.addWidget(self.viewer_highlim_entry, 2, 3)
+
+        layout.addWidget(self.exposure_label, 3, 0)
+        layout.addWidget(self.exposure_entry, 3, 1)
         #layout.addWidget(self.exposure_units, 2, 2)
 
-        layout.addWidget(self.delay_label, 3, 0)
-        layout.addWidget(self.delay_entry, 3, 1)
+        layout.addWidget(self.delay_label, 3, 2)
+        layout.addWidget(self.delay_entry, 3, 3)
         #layout.addWidget(self.delay_units, 3, 2)
 
         # Right column of controls
@@ -195,10 +211,6 @@ class CameraControlsGroup(QGroupBox):
 
         for column in range(6):
             layout.setColumnStretch(column, 1)
-
-        # TEST
-        layout.addWidget(self.test_label, 2, 2)
-        layout.addWidget(self.test_entry, 2, 3)
 
         # ROI/bin group
         layout.addWidget(self.roi_y0_label, 4, 0)
