@@ -152,6 +152,8 @@ class GUI(QDialog):
 
         self.tmp = 0
         self.nbuf = 0
+        self.camera_controls_group.viewer_lowlim_entry.editingFinished.connect(self.set_viewer_limits)
+        self.camera_controls_group.viewer_highlim_entry.editingFinished.connect(self.set_viewer_limits)
         self.show()
 
     def set_layout_motor_control_group(self):
@@ -410,6 +412,11 @@ class GUI(QDialog):
         info_message("Acquiring flats and darks")
         self.getflatsdarks_button.setEnabled(False)
         self.getflatsdarks_button.setEnabled(True)
+
+    def set_viewer_limits(self):
+        self.camera_controls_group.viewer.limits = \
+            [int(self.camera_controls_group.viewer_lowlim_entry.text()),\
+             int(self.camera_controls_group.viewer_highlim_entry.text())]
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
