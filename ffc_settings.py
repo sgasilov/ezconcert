@@ -19,10 +19,10 @@ class FFCSettingsGroup(QGroupBox):
 
         # motor positions
         self.flat_position_label = QLabel()
-        self.flat_position_label.setText("Radio position [mm]")
+        self.flat_position_label.setText("Flat position [mm]")
         self.flat_position_entry = QLineEdit()
         self.radio_position_label = QLabel()
-        self.radio_position_label.setText("Flat position [mm]")
+        self.radio_position_label.setText("Radio position [mm]")
         self.radio_position_entry = QLineEdit()
 
         # number of flats and darks

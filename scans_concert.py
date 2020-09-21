@@ -164,12 +164,17 @@ class ACQsetup(object):
         self.dummy_flat1_acq = Acquisition('dummy_flat_after', self.take_dummy_flats)
         self.dummy_tomo_acq = Acquisition('dummy_tomo', self.take_dummy_tomo)
         self.dummy_dark_acq = Acquisition('dummy_dark', self.take_dummy_darks)
-        self.flats0_softr = Acquisition('flats_before', self.take_flats_softr)
-        self.flats1_softr = Acquisition('flats_after', self.take_flats_softr)
+        self.flats0_softr = Acquisition('flats', self.take_flats_softr)
+        self.flats1_softr = Acquisition('flats2', self.take_flats_softr)
         self.darks_softr = Acquisition('darks', self.take_darks_softr)
         self.tomo_softr = Acquisition('tomo', self.take_tomo_softr)
         self.tomo_softr_buf = Acquisition('tomo', self.take_tomo_softr_buf)
-        self.tomo_maw_acq = Acquisition('tomo', self.take_tomo_maw)
+        self.tomo_pso_acq = Acquisition('tomo', self.take_pso_tomo)
+        self.tomo_async_acq = Acquisition('tomo', self.take_async_tomo)
+        self.flats0_softr_buf = Acquisition('flats', self.take_flats_softr_buf)
+        self.flats1_softr_buf = Acquisition('flats2', self.take_flats_softr_buf())
+        self.darks_softr_buf = Acquisition('darks', self.take_darks_softr_buf)
+        self.tomo_pso_acq_buf = Acquisition('tomo', self.take_pso_tomo_buf)
         self.exp = None
         #super(Radiography, self).__init__(self.acq, walker=walker,
         #                                  separate_scans=sep_scans,
@@ -216,46 +221,135 @@ class ACQsetup(object):
         self.ffcsetup.prepare_radios()
         return self.take_with_beam(self.radio_producer)
 
-    def take_darks_softr(self):
+    def take_darks_softr_old(self):
         """A generator which yields dark fields."""
         self.ffcsetup.close_shutter()
         return frames(self.num_darks, self.camera)
 
+    def take_darks_softr(self):
+        """A generator which yields dark fields."""
+        print("take darks")
+        try:
+            self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+            if self.camera.state != 'recording':
+                self.camera.start_recording()
+            for i in range(self.num_darks):
+                time.sleep(self.dead_time/1000.0) # a small delay seems to be needed when using buffers
+                self.camera.trigger()
+                yield self.camera.grab()
+        except Exception as exp:
+            print(exp)
+            info_message("Something is wrong in take_darksoftr")
+        finally:
+            if self.camera.state == 'recording':
+                self.camera.stop_recording()
+
     def take_flats_softr(self):
         """A generator which yields flat fields."""
-        self.ffcsetup.prepare_flats()
-        self.ffcsetup.open_shutter()
-        self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
-        if self.camera.state == 'recording':
-            self.camera.stop_recording()
+        print("take flats")
         try:
-            with self.camera.recording():
-                for i in range(self.num_flats):
-                    self.camera.trigger()
-                    yield self.camera.grab()
-        except:
+            self.ffcsetup.prepare_flats()
+            self.ffcsetup.open_shutter()
+            self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+            if self.camera.state != 'recording':
+                self.camera.start_recording()
+            for i in range(self.num_flats):
+                time.sleep(self.dead_time/1000.0)
+                self.camera.trigger()
+                yield self.camera.grab()
+        except Exception as exp:
+            print(exp)
             info_message("Something is wrong in take_flats_softr")
         finally:
             if self.camera.state == 'recording':
                 self.camera.stop_recording()
-        self.ffcsetup.close_shutter()
-        self.ffcsetup.prepare_radios()
-        #return
+            self.ffcsetup.close_shutter()
+            self.ffcsetup.prepare_radios()
 
     def take_tomo_softr(self):
-        self.ffcsetup.open_shutter()
-        if self.camera.state != 'recording':
-            self.camera.start_recording()
-        for pos in self.region:
-            self.motor['position'].set(pos).join()
-            self.camera.trigger()
-            yield self.camera.grab()
-        self.ffcsetup.close_shutter()
-        self.camera.stop_recording()
+        print("take tomo")
+        try:
+            self.motor.stepvelocity = 5.0 * q.deg / q.sec
+            self.ffcsetup.open_shutter()
+            if self.camera.state != 'recording':
+                self.camera.start_recording()
+            for pos in self.region:
+                self.motor['position'].set(pos).join()
+                self.camera.trigger()
+                yield self.camera.grab()
+        except Exception as exp:
+            print(exp)
+            info_message("Something is wrong in take_tomo_softr")
+        finally:
+            self.ffcsetup.close_shutter()
+            self.camera.stop_recording()
 
     def take_tomo_softr_buf(self):
-        self.ffcsetup.prepare_radios()
-        return self.take_with_beam(lambda: frames(self.num_flats, self.camera, callback=self.move))
+        print("take tomo (buffer)")
+        try:
+            self.motor.stepvelocity = 5.0 * q.deg/q.sec
+            self.ffcsetup.open_shutter()
+            if self.camera.state != 'recording':
+                self.camera.start_recording()
+            for pos in self.region:
+                self.motor['position'].set(pos).join()
+                self.camera.trigger()
+            self.camera.stop_recording()
+            self.ffcsetup.close_shutter()
+            self.camera.start_readout()
+            for i in range(self.nsteps):
+                yield self.camera.grab()
+            self.camera.stop_readout()
+        except Exception as exp:
+            print(exp)
+            info_message("Something is wrong in take_tomo_softr")
+
+    def take_darks_softr_buf(self):
+        """A generator which yields dark fields."""
+        print("take darks (buffer)")
+        try:
+            self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+            if self.camera.state != 'recording':
+                self.camera.start_recording()
+            for i in range(self.num_darks):
+                time.sleep(self.dead_time/1000.0)
+                self.camera.trigger()
+            if self.camera.state == 'recording':
+                self.camera.stop_recording()
+            self.camera.start_readout()
+            for i in range(self.num_darks):
+                yield self.camera.grab()
+            self.camera.stop_readout()
+        except Exception as exp:
+            print(exp)
+            info_message("Something is wrong in take_darksoftr")
+
+
+    def take_flats_softr_buf(self):
+        """A generator which yields flat fields."""
+        print("take flats (buffer)")
+        try:
+            self.ffcsetup.prepare_flats()
+            self.ffcsetup.open_shutter()
+            self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+            if self.camera.state != 'recording':
+                self.camera.start_recording()
+            for i in range(self.num_flats):
+                time.sleep(self.dead_time/1000.0)
+                self.camera.trigger()
+            if self.camera.state == 'recording':
+                self.camera.stop_recording()
+            self.ffcsetup.close_shutter()
+            self.camera.start_readout()
+            for i in range(self.num_flats):
+                yield self.camera.grab()
+            self.camera.stop_readout()
+        except Exception as exp:
+            print(exp)
+            info_message("Something is wrong in take_flats_softr")
+        finally:
+            self.ffcsetup.prepare_radios()
+
 
     ## DUMMY ACQUISIONS
     def take_dummy_tomo(self):
@@ -283,14 +377,76 @@ class ACQsetup(object):
             yield self.camera.grab()
             sleep(0.5)
 
-    def take_tomo_maw(self):
-        info_message("Starting...")
-        region = np.linspace(self.start, self.range, self.nsteps) * q.deg
-        for pos in region:
-            self.motor.position = pos
-            yield self.camera.grab()
-        info_message("...Done")
+    def take_pso_tomo(self):
+        print("start PSO")
+        try:
+            self.ffcsetup.open_shutter()
+            self.motor.stepvelocity = self.motor.calc_vel(self.nsteps, self.exp_time + self.dead_time, self.range)
+            self.motor.stepangle = float(self.range) / float(self.nsteps) * q.deg
+            # can lose steps at the start so go a bit further to ensure full number of steps
+            # remove this if a PSO window is used
+            self.motor.LENGTH = (self.range + 5*float(self.range) / float(self.nsteps)) * q.deg
+            print("Velocity: {}, Step: {}, Range: {}".format(self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
+            self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
+            self.camera.start_recording()
+            self.motor.PSO_pulse(False).join()
+            time.sleep(1)
+            for i in range(self.nsteps):
+                # print("snap:{}".format(i))
+                yield self.camera.grab()
+        except Exception as exp:
+            print(exp)
+            error_message("Problem in PSO scan")
+        finally:
+            self.camera.stop_recording()
+            self.ffcsetup.close_shutter()
 
+    def take_pso_tomo_buf(self):
+        print("start PSO (buffer)")
+        try:
+            self.ffcsetup.open_shutter()
+            self.motor.stepvelocity = self.motor.calc_vel(self.nsteps, self.exp_time + self.dead_time, self.range)
+            self.motor.stepangle = float(self.range) / float(self.nsteps) * q.deg
+            self.motor.LENGTH = (self.range + 5*float(self.range) / float(self.nsteps)) * q.deg
+            print("Velocity: {}, Step: {}, Range: {}".format(self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
+            self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
+            self.camera.start_recording()
+            self.motor.PSO_pulse(False).join()
+            self.camera.stop_recording()
+            self.ffcsetup.close_shutter()
+            time.sleep(1)
+            self.camera.start_readout()
+            for i in range(self.nsteps):
+                yield self.camera.grab()
+            self.camera.stop_readout()
+            self.camera.start_recording()
+        except Exception as exp:
+            print(exp)
+            error_message("Problem in PSO scan")
+
+
+    def take_async_tomo(self):
+        print("start async scan")
+        try:
+            self.ffcsetup.open_shutter()
+            velocity = self.motor.calc_vel(self.nsteps, self.exp_time + self.dead_time, self.range)
+            self.motor["velocity"].set(velocity ).join()
+            print("constant velocity: {}".format(self.motor._is_velocity_stable()))
+            self.camera.trigger_source = self.camera.trigger_sources.AUTO
+            self.camera.buffered = False
+            with self.camera.recording():
+                time.sleep((self.range / velocity.m))
+            #self.camera.stop_recording()
+            self.ffcsetup.close_shutter()
+            self.motor["velocity"].set(0.0 * q.deg / q.sec).join()
+            print("Number of Images: {}".format(self.camera.recorded_frames))
+            self.camera.start_readout()
+            for i in range(self.nsteps):
+                yield self.camera.grab()
+            self.camera.stop_readout()
+        except Exception as exp:
+            print(exp)
+            error_message("Problem in sync scan")
 
 
 class FFCsetup(object):

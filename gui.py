@@ -316,20 +316,38 @@ class GUI(QDialog):
             except:
                 info_message("Select flat field motor to acquire flats")
             self.concert_scan.ffc_setup.radio_position = self.ffc_controls_group.radio_position * q.mm
-            self.concert_scan.ffc_setup.flat_position = self.ffc_controls_group.radio_position * q.mm
+            self.concert_scan.ffc_setup.flat_position = self.ffc_controls_group.flat_position * q.mm
             self.concert_scan.acq_setup.num_flats = self.ffc_controls_group.num_flats
             self.concert_scan.acq_setup.num_darks = self.ffc_controls_group.num_darks
 
-        # POPULATE THE LIST OF ACQUSITIONS
+        # POPULATE THE LIST OF ACQUISITIONS
         acquisitions = []
         # ffc before
         if self.scan_controls_group.ffc_before:
             #acquisitions.append(self.concert_scan.acq_setup.dummy_flat0_acq)
-            acquisitions.append(self.concert_scan.acq_setup.flats0_softr)
+            if self.camera_controls_group.buffered:
+                acquisitions.append(self.concert_scan.acq_setup.flats0_softr)
+            else:
+                acquisitions.append(self.concert_scan.acq_setup.flats0_softr)
             if self.ffc_controls_group.num_darks>0:
-                acquisitions.append(self.concert_scan.acq_setup.darks_softr)
+                if self.camera_controls_group.buffered:
+                    acquisitions.append(self.concert_scan.acq_setup.darks_softr)
+                else:
+                    acquisitions.append(self.concert_scan.acq_setup.darks_softr)
         # projections
-        acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
+        if self.scan_controls_group.inner_loop_continuous.isChecked():
+            if self.camera_controls_group.trig_mode == "EXTERNAL":
+                if self.camera_controls_group.buffered:
+                    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
+                else:
+                    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
+            else:
+                acquisitions.append(self.concert_scan.acq_setup.tomo_async_acq)
+        else:
+            if self.camera_controls_group.buffered:
+                acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
+            else:
+                acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
         # if self.scan_controls_group.inner_cont is False:
         #     if self.camera_controls_group.buffered is False:
         #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr_notbuf)
@@ -337,7 +355,10 @@ class GUI(QDialog):
         #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr_buf)
         # ffc after
         if self.scan_controls_group.ffc_after:
-            acquisitions.append(self.concert_scan.acq_setup.flats1_softr)
+            if self.camera_controls_group.buffered:
+                acquisitions.append(self.concert_scan.acq_setup.flats1_softr)
+            else:
+                acquisitions.append(self.concert_scan.acq_setup.flats1_softr)
 
         # CREATE NEW WALKER
         if self.file_writer_group.isChecked():

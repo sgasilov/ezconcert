@@ -233,3 +233,6 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# local stuff
+test
