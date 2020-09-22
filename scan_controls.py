@@ -8,6 +8,7 @@ from message_dialog import info_message, error_message
 from scans_concert import ConcertScanThread
 import epics
 
+
 def scan_dummy():
     sleep(10)
     return choice(["Scan completed", "Scan failed"])
@@ -128,7 +129,7 @@ class ScanControlsGroup(QGroupBox):
         layout.addWidget(self.inner_loop_start_entry, 3, 3)
         layout.addWidget(self.inner_loop_steps_entry, 3, 4)
         layout.addWidget(self.inner_loop_range_entry, 3, 5)
-        layout.addWidget(self.inner_loop_endpoint,3, 6)
+        layout.addWidget(self.inner_loop_endpoint, 3, 6)
         layout.addWidget(self.inner_loop_flats_1, 3, 7)
         layout.addWidget(self.inner_loop_continuous, 3, 8)
 
@@ -180,7 +181,3 @@ class ScanControlsGroup(QGroupBox):
     @property
     def inner_cont(self):
         return self.inner_loop_continuous.isChecked()
-
-
-
-

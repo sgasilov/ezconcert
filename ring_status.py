@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, QPushButt
 from epics import PV
 from message_dialog import info_message
 
+
 class RingStatusGroup(QGroupBox):
     """
     Camera controls
@@ -25,7 +26,8 @@ class RingStatusGroup(QGroupBox):
         self.ringcurrent_entry = QLabel()
         self.ringcurrent_entry.setFixedWidth(50)
         self.epics_monitor = EpicsMonitor()
-        self.epics_monitor.i0_state_changed_signal.connect(self.ringcurrent_entry.setText)
+        self.epics_monitor.i0_state_changed_signal.connect(
+            self.ringcurrent_entry.setText)
 
         # Ring status
         self.ringstatus_spacer = QLabel()
@@ -34,7 +36,8 @@ class RingStatusGroup(QGroupBox):
         self.ringstatus_entry = QLabel()
         self.ringstatus_entry.setFixedWidth(50)
         self.status_monitor = StatusMonitor()
-        self.status_monitor.i0_state_changed_signal.connect(self.ringstatus_entry.setText)
+        self.status_monitor.i0_state_changed_signal.connect(
+            self.ringstatus_entry.setText)
 
         # injection in
         self.inj_countdown_spacer = QLabel()
@@ -43,10 +46,10 @@ class RingStatusGroup(QGroupBox):
         self.inj_countdown_entry = QLabel()
         self.inj_countdown_entry.setFixedWidth(50)
         self.lead_monitor = LeadMonitor()
-        self.lead_monitor.i0_state_changed_signal.connect(self.inj_countdown_entry.setText)
+        self.lead_monitor.i0_state_changed_signal.connect(
+            self.inj_countdown_entry.setText)
 
         self.set_layout()
-
 
     def set_layout(self):
         layout = QGridLayout()
@@ -66,6 +69,8 @@ class RingStatusGroup(QGroupBox):
 
 
 I0_PV = "PCT1402-01:mA:fbk"
+
+
 class EpicsMonitor(QObject):
     i0_state_changed_signal = pyqtSignal(str)
 
@@ -81,8 +86,11 @@ class EpicsMonitor(QObject):
         """
         self.i0_state_changed_signal.emit("{:.1f}".format(value))
 
+
 ID_VETO_PV = "TRG1605-1-I20-01:topup:veto"
 BM_VETO_PV = "TRG1605-1-B10-01:topup:veto"
+
+
 class StatusMonitor(QObject):
     i0_state_changed_signal = pyqtSignal(str)
 
@@ -105,6 +113,8 @@ class StatusMonitor(QObject):
 
 ID_LEAD_PV = "TRG1605-1-I20-01:topup:veto:lead"
 BM_LEAD_PV = "TRG1605-1-B10-01:topup:veto:lead"
+
+
 class LeadMonitor(QObject):
     i0_state_changed_signal = pyqtSignal(str)
 

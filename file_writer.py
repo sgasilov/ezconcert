@@ -62,11 +62,11 @@ class FileWriterGroup(QGroupBox):
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
         root_dir = QFileDialog.getExistingDirectory(self, "Select root directory", "",
-                                                           options=options)
+                                                    options=options)
         if root_dir:
             self.root_dir_entry.setText(root_dir)
 
-    #getters
+    # getters
     @property
     def root_dir(self):
         try:
@@ -90,4 +90,4 @@ class FileWriterGroup(QGroupBox):
 
     @property
     def separate_scans(self):
-            return self.separate_scans_checkbox.isChecked()
+        return self.separate_scans_checkbox.isChecked()

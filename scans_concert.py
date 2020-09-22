@@ -10,7 +10,8 @@ from concert.async import async, wait
 from concert.base import identity
 from concert.quantities import q
 from concert.experiments.base import Acquisition, Experiment
-from concert.experiments.imaging import (tomo_projections_number, tomo_max_speed, frames)
+from concert.experiments.imaging import (
+    tomo_projections_number, tomo_max_speed, frames)
 from concert.devices.cameras.base import CameraError
 from concert.devices.cameras.pco import Timestamp
 from concert.devices.cameras.uca import Camera as UcaCamera
@@ -45,8 +46,9 @@ class ConcertScanThread(QThread):
         self.viewer = viewer
         self.camera = camera
         self.ffc_setup = FFCsetup()
-        self.acq_setup = ACQsetup(self.camera, self.ffc_setup) # Collection of acqusitions we create it once
-        self.exp = None # That is experiment. We create it each time before run is pressed
+        # Collection of acqusitions we create it once
+        self.acq_setup = ACQsetup(self.camera, self.ffc_setup)
+        self.exp = None  # That is experiment. We create it each time before run is pressed
         # before that all camera, acquisition, and ffc parameters must be set according to the
         # user input and consumers must be attached
         self.cons_viewer = None
@@ -57,7 +59,7 @@ class ConcertScanThread(QThread):
         self.running_experiment = None
 
     def create_experiment(self, acquisitions, ctsetname, sep_scans):
-        self.exp = Experiment(acquisitions=acquisitions, \
+        self.exp = Experiment(acquisitions=acquisitions,
                               walker=self.walker, separate_scans=sep_scans, name_fmt=ctsetname)
 
     def attach_writer(self, async=True):
@@ -87,13 +89,11 @@ class ConcertScanThread(QThread):
 
         self.camera.exposure_time = exp_time * q.msec
 
-
-
     def stop(self):
         self.thread_running = False
         self.wait()
 
-    def run(self): # .start() calls this function
+    def run(self):  # .start() calls this function
         while self.thread_running:
             if self.starting_scan:
                 self.running_experiment = self.exp.run()
@@ -121,13 +121,6 @@ class ConcertScanThread(QThread):
         except:
             pass
 
-    # @coroutine
-    # def on_data_changed(self):
-    #     while True:
-    #         im = yield
-    #         print("{:0.3f}".format(np.std(im)))
-    #         self.data_changed_signal.emit("{:0.3f}".format(np.std(im)))
-
 
 class ACQsetup(object):
 
@@ -141,8 +134,6 @@ class ACQsetup(object):
         self.camera = camera
         self.num_darks = 0
         self.num_flats = 0
-        #self.radio_producer = radio_producer
-        #self.mainguicallback = callback
         # physical parameters
         self.exp_time = 0.0
         self.dead_time = 0.0
@@ -176,26 +167,24 @@ class ACQsetup(object):
         self.darks_softr_buf = Acquisition('darks', self.take_darks_softr_buf)
         self.tomo_pso_acq_buf = Acquisition('tomo', self.take_pso_tomo_buf)
         self.exp = None
-        #super(Radiography, self).__init__(self.acq, walker=walker,
-        #                                  separate_scans=sep_scans,
-        #                                  name_fmt=name_fmt)
 
-    ## HELPER FUNCTIONS
+    # HELPER FUNCTIONS
 
     def calc_step(self):
         if self.endp:
             self.region = np.linspace(self.start, self.range, self.nsteps) * self.units
             #self.step = self.range / float(self.nsteps - 1)
         else:
-            self.region = np.linspace(self.start, self.range, self.nsteps, False) * self.units
+            self.region = np.linspace(self.start, self.range,
+                                      self.nsteps, False) * self.units
             #self.step = self.range / float(self.nsteps)
         self.step = self.region[1]-self.region[0]
 
     def finish(self):
         self.x = self.start * self.units
-        #if block:
+        # if block:
         self.scan_param.set(self.x).join()
-        #else:
+        # else:
         #    self.scan_param.set(self.x)
 
     def move(self):
@@ -207,13 +196,13 @@ class ACQsetup(object):
         """A generator which yields frames with the shutter open. *generator_caller*
         is a callable which returns a generator yielding frames.
         """
-        #self.ffcsetup.open_shutter()
+        # self.ffcsetup.open_shutter()
         try:
             for frame in generator_caller():
                 yield frame
         except:
             info_message('Error acquiring images with beam')
-        #finally:
+        # finally:
         #    self.ffcsetup.shutter.close().join()
 
     def take_radios(self):
@@ -234,7 +223,8 @@ class ACQsetup(object):
             if self.camera.state != 'recording':
                 self.camera.start_recording()
             for i in range(self.num_darks):
-                time.sleep(self.dead_time/1000.0) # a small delay seems to be needed when using buffers
+                # a small delay seems to be needed when using buffers
+                time.sleep(self.dead_time/1000.0)
                 self.camera.trigger()
                 yield self.camera.grab()
         except Exception as exp:
@@ -324,7 +314,6 @@ class ACQsetup(object):
             print(exp)
             info_message("Something is wrong in take_darksoftr")
 
-
     def take_flats_softr_buf(self):
         """A generator which yields flat fields."""
         print("take flats (buffer)")
@@ -350,8 +339,8 @@ class ACQsetup(object):
         finally:
             self.ffcsetup.prepare_radios()
 
+    # DUMMY ACQUISIONS
 
-    ## DUMMY ACQUISIONS
     def take_dummy_tomo(self):
         try:
             self.camera.start_recording()
@@ -364,8 +353,6 @@ class ACQsetup(object):
             error_message("Something is wrong in dummy tomo acq")
         finally:
             self.camera.stop_recording()
-        #finally:
-        #self.motor.position.set(start).join()
 
     def take_dummy_flats(self):
         for i in range(self.num_flats):
@@ -381,18 +368,20 @@ class ACQsetup(object):
         print("start PSO")
         try:
             self.ffcsetup.open_shutter()
-            self.motor.stepvelocity = self.motor.calc_vel(self.nsteps, self.exp_time + self.dead_time, self.range)
+            self.motor.stepvelocity = self.motor.calc_vel(
+                self.nsteps, self.exp_time + self.dead_time, self.range)
             self.motor.stepangle = float(self.range) / float(self.nsteps) * q.deg
             # can lose steps at the start so go a bit further to ensure full number of steps
             # remove this if a PSO window is used
-            self.motor.LENGTH = (self.range + 5*float(self.range) / float(self.nsteps)) * q.deg
-            print("Velocity: {}, Step: {}, Range: {}".format(self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
+            self.motor.LENGTH = (self.range + 5*float(self.range) /
+                                 float(self.nsteps)) * q.deg
+            print("Velocity: {}, Step: {}, Range: {}".format(
+                self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
             self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
             self.camera.start_recording()
             self.motor.PSO_pulse(False).join()
             time.sleep(1)
             for i in range(self.nsteps):
-                # print("snap:{}".format(i))
                 yield self.camera.grab()
         except Exception as exp:
             print(exp)
@@ -405,10 +394,13 @@ class ACQsetup(object):
         print("start PSO (buffer)")
         try:
             self.ffcsetup.open_shutter()
-            self.motor.stepvelocity = self.motor.calc_vel(self.nsteps, self.exp_time + self.dead_time, self.range)
+            self.motor.stepvelocity = self.motor.calc_vel(
+                self.nsteps, self.exp_time + self.dead_time, self.range)
             self.motor.stepangle = float(self.range) / float(self.nsteps) * q.deg
-            self.motor.LENGTH = (self.range + 5*float(self.range) / float(self.nsteps)) * q.deg
-            print("Velocity: {}, Step: {}, Range: {}".format(self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
+            self.motor.LENGTH = (self.range + 5*float(self.range) /
+                                 float(self.nsteps)) * q.deg
+            print("Velocity: {}, Step: {}, Range: {}".format(
+                self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
             self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
             self.camera.start_recording()
             self.motor.PSO_pulse(False).join()
@@ -424,19 +416,19 @@ class ACQsetup(object):
             print(exp)
             error_message("Problem in PSO scan")
 
-
     def take_async_tomo(self):
         print("start async scan")
         try:
             self.ffcsetup.open_shutter()
-            velocity = self.motor.calc_vel(self.nsteps, self.exp_time + self.dead_time, self.range)
-            self.motor["velocity"].set(velocity ).join()
+            velocity = self.motor.calc_vel(
+                self.nsteps, self.exp_time + self.dead_time, self.range)
+            self.motor["velocity"].set(velocity).join()
             print("constant velocity: {}".format(self.motor._is_velocity_stable()))
             self.camera.trigger_source = self.camera.trigger_sources.AUTO
             self.camera.buffered = False
             with self.camera.recording():
                 time.sleep((self.range / velocity.m))
-            #self.camera.stop_recording()
+            # self.camera.stop_recording()
             self.ffcsetup.close_shutter()
             self.motor["velocity"].set(0.0 * q.deg / q.sec).join()
             print("Number of Images: {}".format(self.camera.recorded_frames))
@@ -459,7 +451,7 @@ class FFCsetup(object):
     each time before experiment is run
     """
 
-    def __init__(self, shutter = None):
+    def __init__(self, shutter=None):
         self.shutter = shutter
         self.flat_motor = None
         self.flat_position = 0.0
@@ -493,6 +485,3 @@ class FFCsetup(object):
 
     def prepare_radios(self, block=True):
         return self._manipulate_flat_motor(self.radio_position, block=block)
-
-
-
