@@ -319,26 +319,26 @@ class GUI(QDialog):
         if self.scan_controls_group.ffc_before:
             # acquisitions.append(self.concert_scan.acq_setup.dummy_flat0_acq)
             if self.camera_controls_group.buffered:
-                acquisitions.append(self.concert_scan.acq_setup.flats0_softr)
+                acquisitions.append(self.concert_scan.acq_setup.flats0_softr_buf)
             else:
                 acquisitions.append(self.concert_scan.acq_setup.flats0_softr)
             if self.ffc_controls_group.num_darks > 0:
                 if self.camera_controls_group.buffered:
-                    acquisitions.append(self.concert_scan.acq_setup.darks_softr)
+                    acquisitions.append(self.concert_scan.acq_setup.darks_softr_buf)
                 else:
                     acquisitions.append(self.concert_scan.acq_setup.darks_softr)
         # projections
         if self.scan_controls_group.inner_loop_continuous.isChecked():
             if self.camera_controls_group.trig_mode == "EXTERNAL":
                 if self.camera_controls_group.buffered:
-                    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
+                    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq_buf)
                 else:
                     acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
             else:
                 acquisitions.append(self.concert_scan.acq_setup.tomo_async_acq)
         else:
             if self.camera_controls_group.buffered:
-                acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
+                acquisitions.append(self.concert_scan.acq_setup.tomo_softr_buf)
             else:
                 acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
         # ffc after
