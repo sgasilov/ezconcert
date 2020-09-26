@@ -4,7 +4,7 @@ from time import sleep
 
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject
 from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, \
-                            QPushButton, QComboBox, QFileDialog
+    QPushButton, QComboBox, QFileDialog
 
 from message_dialog import info_message, error_message, warning_message
 
@@ -15,6 +15,7 @@ from concert.quantities import q
 import os.path as osp
 from matplotlib import pyplot as plt
 from concert.devices.cameras.base import CameraError
+
 
 def connect_to_camera_dummy():
     sleep(5)
@@ -53,7 +54,8 @@ class CameraControlsGroup(QGroupBox):
         self.connect_to_camera_button = QPushButton("Connect to camera")
         self.connect_to_camera_button.clicked.connect(self.connect_to_camera)
         self.connect_to_dummy_camera_button = QPushButton("Connect to dummy camera")
-        self.connect_to_dummy_camera_button.clicked.connect(self.connect_to_dummy_camera)
+        self.connect_to_dummy_camera_button.clicked.connect(
+            self.connect_to_dummy_camera)
         self.connect_to_camera_status = QLabel()
         self.connect_to_camera_status.setText("NOT CONNECTED")
         self.connect_to_camera_status.setStyleSheet("color: red")
@@ -83,7 +85,7 @@ class CameraControlsGroup(QGroupBox):
         self.delay_units = QLabel()
         self.delay_units.setText("msec")
 
-        #viewer limits
+        # viewer limits
         self.viewer_lowlim_label = QLabel()
         self.viewer_lowlim_label.setText("Viewer low limit")
         self.viewer_lowlim_entry = QLineEdit()
@@ -111,12 +113,12 @@ class CameraControlsGroup(QGroupBox):
         self.roi_width_label = QLabel()
         self.roi_width_label.setText("ROI width, columns")
         self.roi_width_entry = QLineEdit()
-        #sensor_vertical_binning
+        # sensor_vertical_binning
         self.sensor_ver_bin_label = QLabel()
         self.sensor_ver_bin_label.setText("Vertical binning")
         self.sensor_ver_bin_entry = QLineEdit()
         self.sensor_ver_bin_entry.setText("1")
-        #sensor_horizontal_binning
+        # sensor_horizontal_binning
         self.sensor_hor_bin_label = QLabel()
         self.sensor_hor_bin_label.setText("Horizontal binning")
         self.sensor_hor_bin_entry = QLineEdit()
@@ -158,7 +160,8 @@ class CameraControlsGroup(QGroupBox):
         self.sensor_pix_rate_entry = QComboBox()
 
         # Thread for live preview
-        self.live_preview_thread = LivePreviewThread(viewer=self.viewer, camera=self.camera)
+        self.live_preview_thread = LivePreviewThread(
+            viewer=self.viewer, camera=self.camera)
         self.live_preview_thread.start()
 
         self.set_layout()
@@ -277,7 +280,8 @@ class CameraControlsGroup(QGroupBox):
         self.connect_to_camera_status.setText("CONNECTED")
         self.connect_to_camera_status.setStyleSheet("color: orange")
         self.camera_model_label.setText("Dummy camera")
-        self.exposure_entry.setText("{}".format(self.camera.exposure_time.magnitude * 1000))
+        self.exposure_entry.setText("{}".format(
+            self.camera.exposure_time.magnitude * 1000))
         self.roi_height_entry.setText("{}".format(self.camera.roi_height.magnitude))
         self.roi_width_entry.setText("{}".format(self.camera.roi_width.magnitude))
         self.roi_y0_entry.setText("{}".format(self.camera.roi_y0.magnitude))
@@ -303,14 +307,18 @@ class CameraControlsGroup(QGroupBox):
         if self.camera.sensor_width.magnitude == 4008:
             self.camera_model_label.setText("PCO 4000")
         # set default values
-        self.exposure_entry.setText("{}".format(self.camera.exposure_time.magnitude*1000))
+        self.exposure_entry.setText("{}".format(
+            self.camera.exposure_time.magnitude*1000))
         self.roi_height_entry.setText("{}".format(self.camera.roi_height.magnitude))
-        self.roi_height_label.setText("ROI height, lines (max. {})".format(self.camera.sensor_height.magnitude))
+        self.roi_height_label.setText("ROI height, lines (max. {})".format(
+            self.camera.sensor_height.magnitude))
         self.roi_width_entry.setText("{}".format(self.camera.roi_width.magnitude))
-        self.roi_width_label.setText("ROI width, columns (max. {})".format(self.camera.sensor_width.magnitude))
+        self.roi_width_label.setText("ROI width, columns (max. {})".format(
+            self.camera.sensor_width.magnitude))
         self.roi_y0_entry.setText("{}".format(self.camera.roi_y0.magnitude))
         self.roi_x0_entry.setText("{}".format(self.camera.roi_x0.magnitude))
-        self.sensor_pix_rate_entry.addItems([str(int(i/1e6)) for i in self.camera.sensor_pixelrates])
+        self.sensor_pix_rate_entry.addItems(
+            [str(int(i/1e6)) for i in self.camera.sensor_pixelrates])
         self.live_preview_thread.camera = self.camera
         self.camera_connected_signal.emit(self.camera)
         self.live_on_button.setEnabled(True)
@@ -358,7 +366,7 @@ class CameraControlsGroup(QGroupBox):
             self.camera.stop_recording()
         except:
             pass
-            #if self.camera_model_label.text() != 'Dummy camera':
+            # if self.camera_model_label.text() != 'Dummy camera':
             #    error_message("Cannot stop recording")
 
     def save_one_image(self):
@@ -368,11 +376,12 @@ class CameraControlsGroup(QGroupBox):
         #options |= QFileDialog.DontUseNativeDialog
         pth = "/data/image-"
         #tmp = osp.join(pth,'image-')
-        #self.QFD.selectFile(tmp)
-        f, fext = self.QFD.getSaveFileName(self, 'Save image', pth, "Image Files (*.tif)")
-        #info_message("{:}".format(fname))
+        # self.QFD.selectFile(tmp)
+        f, fext = self.QFD.getSaveFileName(
+            self, 'Save image', pth, "Image Files (*.tif)")
+        # info_message("{:}".format(fname))
         if f == pth:
-            fname = "{}{:>04}.tif".format(f,self.nim)
+            fname = "{}{:>04}.tif".format(f, self.nim)
             self.nim += 1
         else:
             fname = f + '.tif'
@@ -485,8 +494,6 @@ class CameraControlsGroup(QGroupBox):
             return None
 
 
-
-
 class LivePreviewThread(QThread):
     def __init__(self, viewer, camera):
         super(LivePreviewThread, self).__init__()
@@ -507,7 +514,6 @@ class LivePreviewThread(QThread):
                 sleep(0.05)
             else:
                 sleep(1)
-
 
 
 # class CameraMonitor(QObject):

@@ -1,6 +1,14 @@
+from edc.shutter import CLSShutter
+from edc.motor import CLSLinear, ABRS, CLSAngle, SimMotor
+from scans_concert import ConcertScanThread
+from concert.devices.base import abort as device_abort
+from concert.storage import DirectoryWalker
+from concert.ext.viewers import PyplotImageViewer
+from concert.session.utils import ddoc, dstate, pdoc, code_of, abort
+from concert.quantities import q
 import sys
 
-from PyQt5.QtWidgets import  QGroupBox, QDialog, QApplication, QGridLayout
+from PyQt5.QtWidgets import QGroupBox, QDialog, QApplication, QGridLayout
 from PyQt5.QtWidgets import QLabel, QLineEdit, QPushButton, QComboBox, QCheckBox
 from PyQt5.QtCore import QTimer, QEventLoop
 
@@ -11,30 +19,18 @@ from ring_status import RingStatusGroup
 from scan_controls import ScanControlsGroup
 from message_dialog import info_message, error_message
 
-import time
 import logging
 import concert
 concert.require("0.11.0")
 
-from concert.quantities import q
-from concert.session.utils import ddoc, dstate, pdoc, code_of, abort
 
 LOG = logging.getLogger(__name__)
 
-from concert.ext.viewers import PyplotImageViewer
-from concert.storage import DirectoryWalker
-from concert.session.utils import abort
-from concert.devices.base import abort as device_abort
-
-#import asyncio
-from scans_concert import ConcertScanThread
 
 # Adam's interface EPICS-Concert interface
 from edc.motor import CLSLinear, ABRS, CLSAngle, SimMotor
 from edc.shutter import CLSShutter
 
-import numpy as np
-from time import sleep
 
 class GUI(QDialog):
     '''
@@ -44,6 +40,7 @@ class GUI(QDialog):
     Also has some helper functions such as
     setter which updates all camera parameters
     '''
+
     def __init__(self, *args, **kwargs):
         super(GUI, self).__init__(*args, **kwargs)
         self.setWindowTitle('BMIT GUI')
@@ -78,9 +75,6 @@ class GUI(QDialog):
         self.return_button = QPushButton("RETURN")
         self.return_button.clicked.connect(self.return_to_position)
         self.scan_fps_entry = QLabel()
-
-
-
 
         # PHYSICAL DEVICES
         self.motor_control_group = QGroupBox(title="Motor controls and indicators")
@@ -122,9 +116,12 @@ class GUI(QDialog):
         self.CT_mot_pos_entry = QLabel()
 
         # external subgroups to set parameters
-        self.camera_controls_group = CameraControlsGroup(self.viewer, title="Camera controls")
-        self.camera_controls_group.camera_connected_signal.connect(self.on_camera_connected)
-        self.ffc_controls_group = FFCSettingsGroup(self.motor_flat, self.getflatsdarks_button, title="Flat-field correction settings")
+        self.camera_controls_group = CameraControlsGroup(
+            self.viewer, title="Camera controls")
+        self.camera_controls_group.camera_connected_signal.connect(
+            self.on_camera_connected)
+        self.ffc_controls_group = FFCSettingsGroup(
+            self.motor_flat, self.getflatsdarks_button, title="Flat-field correction settings")
         self.ffc_controls_group.setEnabled(False)
         self.file_writer_group = FileWriterGroup(title="File-writer settings")
         self.file_writer_group.setEnabled(False)
@@ -136,10 +133,8 @@ class GUI(QDialog):
         # Thread for concert scan
         self.concert_scan = None
         #self.scan_thread = ConcertScanThread(viewer=self.viewer, camera=self.camera)
-        #self.scan_thread.scan_finished_signal.connect(self.end_of_scan)
-        #self.scan_thread.start()
-
-
+        # self.scan_thread.scan_finished_signal.connect(self.end_of_scan)
+        # self.scan_thread.start()
 
         self.set_layout_motor_control_group()
         self.set_layout()
@@ -148,12 +143,14 @@ class GUI(QDialog):
         self.connect_time_motor_func()
         self.connect_shutter_func()
 
-        #self.scan_controls_group.inner_loop_flats_0.clicked.connect(self.add_buff)
+        # self.scan_controls_group.inner_loop_flats_0.clicked.connect(self.add_buff)
 
         self.tmp = 0
         self.nbuf = 0
-        self.camera_controls_group.viewer_lowlim_entry.editingFinished.connect(self.set_viewer_limits)
-        self.camera_controls_group.viewer_highlim_entry.editingFinished.connect(self.set_viewer_limits)
+        self.camera_controls_group.viewer_lowlim_entry.editingFinished.connect(
+            self.set_viewer_limits)
+        self.camera_controls_group.viewer_highlim_entry.editingFinished.connect(
+            self.set_viewer_limits)
         self.show()
 
     def set_layout_motor_control_group(self):
@@ -241,14 +238,14 @@ class GUI(QDialog):
 
     def on_camera_connected(self, camera):
         self.concert_scan = ConcertScanThread(self.viewer, camera)
-        self.concert_scan.data_changed_signal.connect(self.camera_controls_group.test_entry.setText)
+        self.concert_scan.data_changed_signal.connect(
+            self.camera_controls_group.test_entry.setText)
         self.concert_scan.scan_finished_signal.connect(self.end_of_scan)
         self.concert_scan.start()
         #self.camera = camera
         self.scan_controls_group.setEnabled(True)
         self.ffc_controls_group.setEnabled(True)
         self.file_writer_group.setEnabled(True)
-
 
     def start(self):
         self.start_button.setEnabled(False)
@@ -260,11 +257,7 @@ class GUI(QDialog):
         # based on the user input
         self.set_scan_params()
         self.scan_controls_group.setTitle("Scan controls. Status: Scan is running")
-        #self.scan_controls_group.setStyleSheet('QGroupBox:title {"font-weight: bold; color: green"}')
-        #self.shutter.open()
-        #time.sleep(1.0)
         self.concert_scan.start_scan()
-        #self.shutter.close()
         # must inform users if there is an attempt to overwrite data
         # that is ctsetname is not a pattern and its name has'not been change
         # since the last run. Data cannot be overwritten, but
@@ -289,7 +282,7 @@ class GUI(QDialog):
                                             self.camera_controls_group.roi_y0,
                                             self.camera_controls_group.roi_height)
 
-        #### SET ACQUISION PARAMETERS
+        # SET ACQUISION PARAMETERS
         # Times as floating point numbers [msec] to compute the CT stage motion
         self.concert_scan.acq_setup.dead_time = self.camera_controls_group.dead_time
         self.concert_scan.acq_setup.exp_time = self.camera_controls_group.exp_time
@@ -303,46 +296,62 @@ class GUI(QDialog):
         self.concert_scan.acq_setup.range = self.scan_controls_group.inner_range
         self.concert_scan.acq_setup.endp = self.scan_controls_group.inner_endpoint
         self.concert_scan.acq_setup.calc_step()
-        #info_message("{:}".format(self.concert_scan.acq_setup.step))
+        # info_message("{:}".format(self.concert_scan.acq_setup.step))
         # Outer motor and scan intervals
         # the outer motor scan be setup in the concert_scan to repeat exp multiple times
 
-        #### SET shutter
+        # SET shutter
         self.concert_scan.ffc_setup.shutter = self.shutter
-        #### SET FFC parameters
+        # SET FFC parameters
         if self.scan_controls_group.ffc_before or self.scan_controls_group.ffc_after:
             try:
                 self.concert_scan.ffc_setup.flat_motor = self.motors[self.ffc_controls_group.flat_motor]
             except:
                 info_message("Select flat field motor to acquire flats")
             self.concert_scan.ffc_setup.radio_position = self.ffc_controls_group.radio_position * q.mm
-            self.concert_scan.ffc_setup.flat_position = self.ffc_controls_group.radio_position * q.mm
+            self.concert_scan.ffc_setup.flat_position = self.ffc_controls_group.flat_position * q.mm
             self.concert_scan.acq_setup.num_flats = self.ffc_controls_group.num_flats
             self.concert_scan.acq_setup.num_darks = self.ffc_controls_group.num_darks
 
-        # POPULATE THE LIST OF ACQUSITIONS
+        # POPULATE THE LIST OF ACQUISITIONS
         acquisitions = []
         # ffc before
         if self.scan_controls_group.ffc_before:
-            #acquisitions.append(self.concert_scan.acq_setup.dummy_flat0_acq)
-            acquisitions.append(self.concert_scan.acq_setup.flats0_softr)
-            if self.ffc_controls_group.num_darks>0:
-                acquisitions.append(self.concert_scan.acq_setup.darks_softr)
+            # acquisitions.append(self.concert_scan.acq_setup.dummy_flat0_acq)
+            if self.camera_controls_group.buffered:
+                acquisitions.append(self.concert_scan.acq_setup.flats0_softr_buf)
+            else:
+                acquisitions.append(self.concert_scan.acq_setup.flats0_softr)
+            if self.ffc_controls_group.num_darks > 0:
+                if self.camera_controls_group.buffered:
+                    acquisitions.append(self.concert_scan.acq_setup.darks_softr_buf)
+                else:
+                    acquisitions.append(self.concert_scan.acq_setup.darks_softr)
         # projections
-        acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
-        # if self.scan_controls_group.inner_cont is False:
-        #     if self.camera_controls_group.buffered is False:
-        #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr_notbuf)
-        #     if self.camera_controls_group.buffered is True:
-        #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr_buf)
+        if self.scan_controls_group.inner_loop_continuous.isChecked():
+            if self.camera_controls_group.trig_mode == "EXTERNAL":
+                if self.camera_controls_group.buffered:
+                    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq_buf)
+                else:
+                    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
+            else:
+                acquisitions.append(self.concert_scan.acq_setup.tomo_async_acq)
+        else:
+            if self.camera_controls_group.buffered:
+                acquisitions.append(self.concert_scan.acq_setup.tomo_softr_buf)
+            else:
+                acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
         # ffc after
         if self.scan_controls_group.ffc_after:
-            acquisitions.append(self.concert_scan.acq_setup.flats1_softr)
+            if self.camera_controls_group.buffered:
+                acquisitions.append(self.concert_scan.acq_setup.flats1_softr)
+            else:
+                acquisitions.append(self.concert_scan.acq_setup.flats1_softr)
 
         # CREATE NEW WALKER
         if self.file_writer_group.isChecked():
             self.concert_scan.walker = DirectoryWalker(root=self.file_writer_group.root_dir,
-                                 dsetname=self.file_writer_group.dsetname)
+                                                       dsetname=self.file_writer_group.dsetname)
         else:
             # if writer is disabled we do not need walker as well
             self.concert_scan.walker = None
@@ -364,38 +373,29 @@ class GUI(QDialog):
             self.concert_scan.attach_writer()
         self.concert_scan.attach_viewer()
 
-
     def abort(self):
         self.concert_scan.abort_scan()
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
         self.return_button.setEnabled(True)
         # calls global Concert abort() command
-        # aborst concert experiemnt not necesserely stops motor
+        # abort concert experiment not necessarily stops motor
         self.scan_status_update_timer.stop()
 
-        #global concert abort to stop sessions
-        #abort()
         # use motor list to abort
         device_abort(m for m in self.motors.values() if m is not None)
-        #info_message("Scan aborted")
-        self.scan_controls_group.setTitle("Scan controls. Status: scan was aborted by user")
-        #self.scan_controls_group.setStyleSheet('QGroupBox:title {"font-weight: bold; color: orange"}')
-        #self.scan_thread.scan_running = False
+        self.scan_controls_group.setTitle(
+            "Scan controls. Status: scan was aborted by user")
 
     def end_of_scan(self):
-        # call abort command instead
-        # self.scan_status_update_timer.stop()
-
         #### This section runs only if scan was finished normally, but not aborted ###
         if not self.return_button.isEnabled():
             #info_message("Scan finished")
-            self.scan_controls_group.setTitle("Scan controls. Status: scan was finished without errors")
-            #self.scan_controls_group.setStyleSheet('QGroupBox:title {"font-weight: bold; color: green"}')
+            self.scan_controls_group.setTitle(
+                "Scan controls. Status: scan was finished without errors")
 
-        #### End of section
+        # End of section
 
-        # info_message("Scan finished, future state{}, yielded {} times".format(self.f.done(), self.tmp))
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
 
@@ -406,7 +406,7 @@ class GUI(QDialog):
 
     def return_to_position(self):
         info_message("Returning to position...")
-        #info_message(result)
+        # info_message(result)
 
     def getflatsdarks(self):
         info_message("Acquiring flats and darks")
@@ -415,8 +415,9 @@ class GUI(QDialog):
 
     def set_viewer_limits(self):
         self.camera_controls_group.viewer.limits = \
-            [int(self.camera_controls_group.viewer_lowlim_entry.text()),\
+            [int(self.camera_controls_group.viewer_lowlim_entry.text()),
              int(self.camera_controls_group.viewer_highlim_entry.text())]
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

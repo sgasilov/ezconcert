@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import QLabel, QGroupBox, QLineEdit, QPushButton, QComboBox
 
 from message_dialog import info_message
 
+
 class FFCSettingsGroup(QGroupBox):
     """
     Flat-field correction settings
@@ -19,10 +20,10 @@ class FFCSettingsGroup(QGroupBox):
 
         # motor positions
         self.flat_position_label = QLabel()
-        self.flat_position_label.setText("Radio position [mm]")
+        self.flat_position_label.setText("Flat position [mm]")
         self.flat_position_entry = QLineEdit()
         self.radio_position_label = QLabel()
-        self.radio_position_label.setText("Flat position [mm]")
+        self.radio_position_label.setText("Radio position [mm]")
         self.radio_position_entry = QLineEdit()
 
         # number of flats and darks
@@ -37,7 +38,6 @@ class FFCSettingsGroup(QGroupBox):
 
         # acquire button and motor position indicators
         self.getflatsdarks_button = guibutton
-
 
         self.set_layout()
 
@@ -56,8 +56,6 @@ class FFCSettingsGroup(QGroupBox):
 
         layout.addWidget(self.getflatsdarks_button, 1, 0)
 
-
-
         self.setLayout(layout)
 
     @property
@@ -66,6 +64,7 @@ class FFCSettingsGroup(QGroupBox):
             return self.motor_options_entry.currentText()
         except ValueError:
             return None
+
     @property
     def flat_position(self):
         try:
