@@ -1,6 +1,7 @@
 from epics import PV
 from PyQt5.QtCore import pyqtSignal, QObject
 
+
 class EpicsMonitorFloat(QObject):
     i0_state_changed_signal = pyqtSignal(str)
 
@@ -18,6 +19,7 @@ class EpicsMonitorFloat(QObject):
         """
         self.value = value
         self.i0_state_changed_signal.emit("{:.3f}".format(value))
+
 
 class EpicsMonitorFIS(QObject):
     i0_state_changed_signal = pyqtSignal(str)

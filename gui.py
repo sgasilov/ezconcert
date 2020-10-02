@@ -1,3 +1,5 @@
+from edc.shutter import CLSShutter
+from edc.motor import CLSLinear, ABRS, CLSAngle, SimMotor
 from scans_concert import ConcertScanThread
 from concert.devices.base import abort as device_abort
 from concert.storage import DirectoryWalker
@@ -27,8 +29,6 @@ LOG = logging.getLogger(__name__)
 
 
 # Adam's interface EPICS-Concert interface
-from edc.motor import CLSLinear, ABRS, CLSAngle, SimMotor
-from edc.shutter import CLSShutter
 
 
 class GUI(QDialog):
@@ -176,7 +176,7 @@ class GUI(QDialog):
 
         # connect to timer and shutter and populate lists of motors
         self.connect_time_motor_func()
-        #self.connect_shutter_func()
+        # self.connect_shutter_func()
 
         # self.scan_controls_group.inner_loop_flats_0.clicked.connect(self.add_buff)
 
@@ -214,7 +214,6 @@ class GUI(QDialog):
         layout.addWidget(self.hor_mot_pos_move, 1, 9)
         layout.addWidget(self.vert_mot_pos_move, 1, 6)
         layout.addWidget(self.CT_mot_pos_move, 1, 3)
-
 
     def set_layout(self):
         main_layout = QGridLayout()
@@ -533,10 +532,12 @@ class GUI(QDialog):
         if self.vert_motor is None:
             return
         else:
-            self.vert_motor['position'].set(self.vert_mot_pos_move.value() * q.mm).join()
+            self.vert_motor['position'].set(
+                self.vert_mot_pos_move.value() * q.mm).join()
 
     def stop_motors_func(self):
         device_abort(m for m in self.motors.values() if m is not None)
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
