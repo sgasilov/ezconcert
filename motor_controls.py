@@ -1,5 +1,6 @@
 from epics import PV
-from PyQt5.QtCore import pyqtSignal, QObject
+import atexit
+from PyQt5.QtCore import pyqtSignal, QObject, QThread
 
 
 class EpicsMonitorFloat(QObject):
@@ -46,3 +47,28 @@ class EpicsMonitorFIS(QObject):
         else:
             value_str = 'Error'
         self.i0_state_changed_signal.emit(value_str)
+
+
+class MotionThread(QThread):
+
+    def __init__(self, motor, position):
+        super(MotionThread, self).__init__()
+        self.motor = motor
+        self.thread_running = True
+        atexit.register(self.stop)
+        self.position = position
+
+    def stop(self):
+        self.thread_running = False
+        self.wait()
+
+    def run(self):  # .start() calls this function
+        while self.thread_running:
+            self.motor['position'].set(self.position.value() * self.motor.UNITS).join()
+            self.thread_running = False
+
+    def abort(self):
+        try:
+            self.motor.abort()
+        except:
+            pass

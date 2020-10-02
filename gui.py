@@ -18,7 +18,7 @@ from ffc_settings import FFCSettingsGroup
 from ring_status import RingStatusGroup
 from scan_controls import ScanControlsGroup
 from message_dialog import info_message, error_message
-from motor_controls import EpicsMonitorFloat, EpicsMonitorFIS
+from motor_controls import EpicsMonitorFloat, EpicsMonitorFIS, MotionThread
 
 import logging
 import concert
@@ -167,6 +167,9 @@ class GUI(QDialog):
         self.scan_controls_group.setEnabled(False)
         # Thread for concert scan
         self.concert_scan = None
+        self.motion_CT = None
+        self.motion_vert = None
+        self.motion_hor = None
         #self.scan_thread = ConcertScanThread(viewer=self.viewer, camera=self.camera)
         # self.scan_thread.scan_finished_signal.connect(self.end_of_scan)
         # self.scan_thread.start()
@@ -508,34 +511,42 @@ class GUI(QDialog):
         if self.CT_motor is None:
             return
         else:
-            self.CT_motor.disable()
-            self.CT_motor.faultack()
-            self.CT_motor.EXT_CMD.put('PROGRAM RUN 1, "TCPClient.bcx"')
-            self.CT_motor.enable()
-            self.CT_mot_monitor.i0.run_callback(self.CT_mot_monitor.call_idx)
-            self.CT_motor.home()
+            # self.CT_motor.disable()
+            # self.CT_motor.faultack()
+            #self.CT_motor.EXT_CMD.put('PROGRAM RUN 1, "TCPClient.bcx"')
+            # self.CT_motor.enable()
+            # self.CT_mot_monitor.i0.run_callback(self.CT_mot_monitor.call_idx)
+            self.CT_motor.home().join()
 
     def CT_move_func(self):
         '''Clear faults and home stage'''
         if self.CT_motor is None:
             return
         else:
-            self.CT_motor['position'].set(self.CT_mot_pos_move.value() * q.deg).join()
+            self.motion_CT = MotionThread(self.CT_motor, self.CT_mot_pos_move)
+            self.motion_CT.start()
 
     def hor_move_func(self):
         if self.hor_motor is None:
             return
         else:
-            self.hor_motor['position'].set(self.hor_mot_pos_move.value() * q.mm).join()
+            self.motion_hor = MotionThread(self.hor_motor, self.hor_mot_pos_move)
+            self.motion_hor.start()
 
     def vert_move_func(self):
         if self.vert_motor is None:
             return
         else:
-            self.vert_motor['position'].set(
-                self.vert_mot_pos_move.value() * q.mm).join()
+            self.motion_vert = MotionThread(self.vert_motor, self.vert_mot_pos_move)
+            self.motion_vert.start()
 
     def stop_motors_func(self):
+        if self.motion_CT is not None:
+            self.motion_CT.abort()
+        if self.motion_vert is not None:
+            self.motion_vert.abort()
+        if self.motion_hor is not None:
+            self.motion_hor.abort()
         device_abort(m for m in self.motors.values() if m is not None)
 
 
