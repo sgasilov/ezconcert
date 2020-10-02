@@ -97,6 +97,7 @@ class StatusMonitor(QObject):
     def __init__(self):
         super(StatusMonitor, self).__init__()
         self.i0 = PV(BM_VETO_PV, callback=self.on_state_changed)
+        self.value = None
 
     def on_state_changed(self, value, **kwargs):
         """
@@ -104,6 +105,7 @@ class StatusMonitor(QObject):
         :param kwargs: the rest of arguments
         :return: None
         """
+        self.value = value
         if value:
             value = "Veto"
         else:
@@ -121,6 +123,7 @@ class LeadMonitor(QObject):
     def __init__(self):
         super(LeadMonitor, self).__init__()
         self.i0 = PV(BM_LEAD_PV, callback=self.on_state_changed)
+        self.value = None
 
     def on_state_changed(self, value, **kwargs):
         """
@@ -128,4 +131,5 @@ class LeadMonitor(QObject):
         :param kwargs: the rest of arguments
         :return: None
         """
+        self.value = value
         self.i0_state_changed_signal.emit("{:.1f}".format(value))
