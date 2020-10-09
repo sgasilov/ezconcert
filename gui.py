@@ -9,7 +9,7 @@ from concert.quantities import q
 import sys
 
 from PyQt5.QtWidgets import QGroupBox, QDialog, QApplication, QGridLayout
-from PyQt5.QtWidgets import QLabel, QLineEdit, QPushButton, QComboBox, QCheckBox
+from PyQt5.QtWidgets import QLabel, QLineEdit, QPushButton, QComboBox, QCheckBox, QDoubleSpinBox
 from PyQt5.QtCore import QTimer, QEventLoop
 
 from camera_controls import CameraControlsGroup
@@ -18,6 +18,7 @@ from ffc_settings import FFCSettingsGroup
 from ring_status import RingStatusGroup
 from scan_controls import ScanControlsGroup
 from message_dialog import info_message, error_message
+from motor_controls import EpicsMonitorFloat, EpicsMonitorFIS, MotionThread
 
 import logging
 import concert
@@ -28,8 +29,6 @@ LOG = logging.getLogger(__name__)
 
 
 # Adam's interface EPICS-Concert interface
-from edc.motor import CLSLinear, ABRS, CLSAngle, SimMotor
-from edc.shutter import CLSShutter
 
 
 class GUI(QDialog):
@@ -91,29 +90,65 @@ class GUI(QDialog):
         self.motor_outer = None
         self.motor_flat = None
         # connect buttons
-        self.connect_hor_mot_button = QPushButton("Connect to horizontal stage")
-        self.connect_vert_mot_button = QPushButton("Connect to vertical stage")
-        self.connect_CT_mot_button = QPushButton("Connect to CT stage")
+        self.connect_hor_mot_button = QPushButton("horizontal stage")
+        self.connect_vert_mot_button = QPushButton("vertical stage")
+        self.connect_CT_mot_button = QPushButton("CT stage")
+        self.connect_shutter_button = QPushButton("Imaging shutter")
         # this are to be implemeted depending on low-level interface (EPICS/Tango/etc)
         self.connect_hor_mot_button.clicked.connect(self.connect_hor_motor_func)
         self.connect_vert_mot_button.clicked.connect(self.connect_vert_motor_func)
         self.connect_CT_mot_button.clicked.connect(self.connect_CT_motor_func)
+        self.connect_shutter_button.clicked.connect(self.connect_shutter_func)
 
         # position indicators
         self.mot_pos_info_label = QLabel()
         self.mot_pos_info_label.setText("Status")
-
         self.hor_mot_pos_label = QLabel()
         self.hor_mot_pos_label.setText("Not connected")
         self.hor_mot_pos_entry = QLabel()
-
         self.vert_mot_pos_label = QLabel()
         self.vert_mot_pos_label.setText("Not connected")
         self.vert_mot_pos_entry = QLabel()
-
         self.CT_mot_pos_label = QLabel()
         self.CT_mot_pos_label.setText("Not connected")
         self.CT_mot_pos_entry = QLabel()
+        self.shutter_label = QLabel()
+        self.shutter_label.setText("Not connected")
+        self.shutter_entry = QLabel()
+
+        # position entry
+        self.hor_mot_pos_move = QDoubleSpinBox()
+        self.hor_mot_pos_move.setDecimals(3)
+        self.hor_mot_pos_move.setRange(-100, 100)
+        self.vert_mot_pos_move = QDoubleSpinBox()
+        self.vert_mot_pos_move.setDecimals(3)
+        self.vert_mot_pos_move.setRange(-100, 100)
+        self.CT_mot_pos_move = QDoubleSpinBox()
+        self.CT_mot_pos_move.setDecimals(3)
+        self.CT_mot_pos_move.setRange(-720, 720)
+
+        # Move Buttons
+        self.stop_motors_button = QPushButton("STOP ALL")
+        self.move_hor_mot_button = QPushButton("Move To")
+        self.move_hor_mot_button.setEnabled(False)
+        self.move_vert_mot_button = QPushButton("Move To")
+        self.move_vert_mot_button.setEnabled(False)
+        self.move_CT_mot_button = QPushButton("Move To")
+        self.move_CT_mot_button.setEnabled(False)
+        self.home_CT_mot_button = QPushButton("Home")
+        self.home_CT_mot_button.setEnabled(False)
+        self.open_shutter_button = QPushButton("Open")
+        self.open_shutter_button.setEnabled(False)
+        self.close_shutter_button = QPushButton("Close")
+        self.close_shutter_button.setEnabled(False)
+
+        self.move_hor_mot_button.clicked.connect(self.hor_move_func)
+        self.move_vert_mot_button.clicked.connect(self.vert_move_func)
+        self.home_CT_mot_button.clicked.connect(self.CT_home_func)
+        self.move_CT_mot_button.clicked.connect(self.CT_move_func)
+        self.open_shutter_button.clicked.connect(self.open_shutter_func)
+        self.close_shutter_button.clicked.connect(self.close_shutter_func)
+        self.stop_motors_button.clicked.connect(self.stop_motors_func)
 
         # external subgroups to set parameters
         self.camera_controls_group = CameraControlsGroup(
@@ -132,6 +167,9 @@ class GUI(QDialog):
         self.scan_controls_group.setEnabled(False)
         # Thread for concert scan
         self.concert_scan = None
+        self.motion_CT = None
+        self.motion_vert = None
+        self.motion_hor = None
         #self.scan_thread = ConcertScanThread(viewer=self.viewer, camera=self.camera)
         # self.scan_thread.scan_finished_signal.connect(self.end_of_scan)
         # self.scan_thread.start()
@@ -141,7 +179,7 @@ class GUI(QDialog):
 
         # connect to timer and shutter and populate lists of motors
         self.connect_time_motor_func()
-        self.connect_shutter_func()
+        # self.connect_shutter_func()
 
         # self.scan_controls_group.inner_loop_flats_0.clicked.connect(self.add_buff)
 
@@ -155,17 +193,30 @@ class GUI(QDialog):
 
     def set_layout_motor_control_group(self):
         layout = QGridLayout()
-        layout.addWidget(self.connect_CT_mot_button, 0, 2, 1, 2)
-        layout.addWidget(self.connect_vert_mot_button, 0, 4, 1, 2)
-        layout.addWidget(self.connect_hor_mot_button, 0, 6, 1, 2)
-        layout.addWidget(self.mot_pos_info_label, 1, 1)
+        layout.addWidget(self.stop_motors_button, 0, 1, 2, 1)
+        layout.addWidget(self.connect_CT_mot_button, 0, 2, 1, 1)
+        layout.addWidget(self.connect_vert_mot_button, 0, 5, 1, 1)
+        layout.addWidget(self.connect_hor_mot_button, 0, 8, 1, 1)
+        layout.addWidget(self.connect_shutter_button, 0, 11, 1, 1)
+        layout.addWidget(self.move_CT_mot_button, 0, 3, 1, 1)
+        layout.addWidget(self.home_CT_mot_button, 0, 4, 1, 1)
+        layout.addWidget(self.move_vert_mot_button, 0, 6, 1, 1)
+        layout.addWidget(self.move_hor_mot_button, 0, 9, 1, 1)
+        layout.addWidget(self.open_shutter_button, 0, 12, 1, 1)
+        layout.addWidget(self.close_shutter_button, 1, 12, 1, 1)
+        # layout.addWidget(self.mot_pos_info_label, 1, 1)
         layout.addWidget(self.CT_mot_pos_label, 1, 2)
         layout.addWidget(self.CT_mot_pos_entry, 1, 3)
-        layout.addWidget(self.vert_mot_pos_label, 1, 4)
-        layout.addWidget(self.vert_mot_pos_entry, 1, 5)
-        layout.addWidget(self.hor_mot_pos_label, 1, 6)
-        layout.addWidget(self.hor_mot_pos_entry, 1, 7)
+        layout.addWidget(self.vert_mot_pos_label, 1, 5)
+        layout.addWidget(self.vert_mot_pos_entry, 1, 6)
+        layout.addWidget(self.hor_mot_pos_label, 1, 8)
+        layout.addWidget(self.hor_mot_pos_entry, 1, 9)
+        layout.addWidget(self.shutter_label, 1, 11)
+        #layout.addWidget(self.shutter_entry, 1, 12)
         self.motor_control_group.setLayout(layout)
+        layout.addWidget(self.hor_mot_pos_move, 1, 9)
+        layout.addWidget(self.vert_mot_pos_move, 1, 6)
+        layout.addWidget(self.CT_mot_pos_move, 1, 3)
 
     def set_layout(self):
         main_layout = QGridLayout()
@@ -183,13 +234,18 @@ class GUI(QDialog):
         except:
             error_message("Can not connect to horizontal stage, try again")
         if self.hor_motor is not None:
-            self.hor_mot_pos_label.setText("Connected, position [mm]")
+            self.hor_mot_pos_label.setText("Position [mm]")
             tmp = "Horizontal [mm]"
             self.motors[tmp] = self.hor_motor
             self.connect_hor_mot_button.setEnabled(False)
+            self.move_hor_mot_button.setEnabled(True)
             self.scan_controls_group.inner_loop_motor.addItem(tmp)
             self.scan_controls_group.outer_loop_motor.addItem(tmp)
             self.ffc_controls_group.motor_options_entry.addItem(tmp)
+            self.hor_mot_monitor = EpicsMonitorFloat(self.hor_motor.RBV)
+            self.hor_mot_monitor.i0_state_changed_signal.connect(
+                self.hor_mot_pos_label.setText)
+            self.hor_mot_monitor.i0.run_callback(self.hor_mot_monitor.call_idx)
 
     def connect_vert_motor_func(self):
         try:
@@ -197,12 +253,17 @@ class GUI(QDialog):
         except:
             error_message("Can not connect to vertical stage, try again")
         if self.vert_motor is not None:
-            self.vert_mot_pos_label.setText("Connected, position [mm]")
+            self.vert_mot_pos_label.setText("Position [mm]")
             tmp = "Vertical [mm]"
             self.motors[tmp] = self.hor_motor
             self.connect_vert_mot_button.setEnabled(False)
+            self.move_vert_mot_button.setEnabled(True)
             self.scan_controls_group.outer_loop_motor.addItem(tmp)
             self.ffc_controls_group.motor_options_entry.addItem(tmp)
+            self.vert_mot_monitor = EpicsMonitorFloat(self.vert_motor.RBV)
+            self.vert_mot_monitor.i0_state_changed_signal.connect(
+                self.vert_mot_pos_label.setText)
+            self.vert_mot_monitor.i0.run_callback(self.vert_mot_monitor.call_idx)
 
     def connect_CT_motor_func(self):
         try:
@@ -210,11 +271,17 @@ class GUI(QDialog):
         except:
             error_message("Could not connect to CT stage, try again")
         if self.CT_motor is not None:
-            self.CT_mot_pos_label.setText("Connected, position [deg]")
+            self.CT_mot_pos_label.setText("Position [deg]")
             tmp = "CT stage [deg]"
             self.motors[tmp] = self.CT_motor
             self.connect_CT_mot_button.setEnabled(False)
+            self.move_CT_mot_button.setEnabled(True)
+            self.home_CT_mot_button.setEnabled(True)
             self.scan_controls_group.inner_loop_motor.addItem(tmp)
+            self.CT_mot_monitor = EpicsMonitorFloat(self.CT_motor.RBV)
+            self.CT_mot_monitor.i0_state_changed_signal.connect(
+                self.CT_mot_pos_label.setText)
+            self.CT_mot_monitor.i0.run_callback(self.CT_mot_monitor.call_idx)
 
     def connect_time_motor_func(self):
         try:
@@ -233,8 +300,16 @@ class GUI(QDialog):
         except:
             error_message("Could not connect to fast imaging shutter, try again")
         if self.shutter is not None:
+            self.shutter_label.setText("Connected")
             tmp = "Shutter []"
             self.motors[tmp] = self.shutter
+            self.connect_shutter_button.setEnabled(False)
+            self.open_shutter_button.setEnabled(True)
+            self.close_shutter_button.setEnabled(True)
+            self.shutter_monitor = EpicsMonitorFIS(self.shutter.STATE)
+            self.shutter_monitor.i0_state_changed_signal.connect(
+                self.shutter_label.setText)
+            self.shutter_monitor.i0.run_callback(self.shutter_monitor.call_idx)
 
     def on_camera_connected(self, camera):
         self.concert_scan = ConcertScanThread(self.viewer, camera)
@@ -417,6 +492,62 @@ class GUI(QDialog):
         self.camera_controls_group.viewer.limits = \
             [int(self.camera_controls_group.viewer_lowlim_entry.text()),
              int(self.camera_controls_group.viewer_highlim_entry.text())]
+
+    # motor functions
+
+    def open_shutter_func(self):
+        if self.shutter is None:
+            return
+        else:
+            self.shutter.open()
+
+    def close_shutter_func(self):
+        if self.shutter is None:
+            return
+        else:
+            self.shutter.close()
+
+    def CT_home_func(self):
+        if self.CT_motor is None:
+            return
+        else:
+            # self.CT_motor.disable()
+            # self.CT_motor.faultack()
+            #self.CT_motor.EXT_CMD.put('PROGRAM RUN 1, "TCPClient.bcx"')
+            # self.CT_motor.enable()
+            # self.CT_mot_monitor.i0.run_callback(self.CT_mot_monitor.call_idx)
+            self.CT_motor.home().join()
+
+    def CT_move_func(self):
+        '''Clear faults and home stage'''
+        if self.CT_motor is None:
+            return
+        else:
+            self.motion_CT = MotionThread(self.CT_motor, self.CT_mot_pos_move)
+            self.motion_CT.start()
+
+    def hor_move_func(self):
+        if self.hor_motor is None:
+            return
+        else:
+            self.motion_hor = MotionThread(self.hor_motor, self.hor_mot_pos_move)
+            self.motion_hor.start()
+
+    def vert_move_func(self):
+        if self.vert_motor is None:
+            return
+        else:
+            self.motion_vert = MotionThread(self.vert_motor, self.vert_mot_pos_move)
+            self.motion_vert.start()
+
+    def stop_motors_func(self):
+        if self.motion_CT is not None:
+            self.motion_CT.abort()
+        if self.motion_vert is not None:
+            self.motion_vert.abort()
+        if self.motion_hor is not None:
+            self.motion_hor.abort()
+        device_abort(m for m in self.motors.values() if m is not None)
 
 
 if __name__ == '__main__':

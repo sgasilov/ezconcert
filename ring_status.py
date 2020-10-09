@@ -93,10 +93,12 @@ BM_VETO_PV = "TRG1605-1-B10-01:topup:veto"
 
 class StatusMonitor(QObject):
     i0_state_changed_signal = pyqtSignal(str)
+    i0_state_changed_signal2 = pyqtSignal(bool)
 
     def __init__(self):
         super(StatusMonitor, self).__init__()
         self.i0 = PV(BM_VETO_PV, callback=self.on_state_changed)
+        self.value = None
 
     def on_state_changed(self, value, **kwargs):
         """
@@ -104,6 +106,8 @@ class StatusMonitor(QObject):
         :param kwargs: the rest of arguments
         :return: None
         """
+        self.value = value
+        self.i0_state_changed_signal2.emit(value)
         if value:
             value = "Veto"
         else:
@@ -117,10 +121,12 @@ BM_LEAD_PV = "TRG1605-1-B10-01:topup:veto:lead"
 
 class LeadMonitor(QObject):
     i0_state_changed_signal = pyqtSignal(str)
+    i0_state_changed_signal2 = pyqtSignal(float)
 
     def __init__(self):
         super(LeadMonitor, self).__init__()
         self.i0 = PV(BM_LEAD_PV, callback=self.on_state_changed)
+        self.value = None
 
     def on_state_changed(self, value, **kwargs):
         """
@@ -128,4 +134,6 @@ class LeadMonitor(QObject):
         :param kwargs: the rest of arguments
         :return: None
         """
+        self.value = value
         self.i0_state_changed_signal.emit("{:.1f}".format(value))
+        self.i0_state_changed_signal2.emit(value)
