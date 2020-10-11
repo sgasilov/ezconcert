@@ -530,6 +530,7 @@ class GUI(QDialog):
         if self.CT_motor is None:
             return
         else:
+            self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
             self.motion_CT = MotionThread(self.CT_motor, self.CT_mot_pos_move)
             self.motion_CT.start()
 
