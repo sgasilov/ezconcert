@@ -137,6 +137,8 @@ class GUI(QDialog):
         self.move_CT_mot_button.setEnabled(False)
         self.home_CT_mot_button = QPushButton("Home")
         self.home_CT_mot_button.setEnabled(False)
+        self.reset_CT_mot_button = QPushButton("Reset")
+        self.reset_CT_mot_button.setEnabled(False)
         self.open_shutter_button = QPushButton("Open")
         self.open_shutter_button.setEnabled(False)
         self.close_shutter_button = QPushButton("Close")
@@ -145,6 +147,7 @@ class GUI(QDialog):
         self.move_hor_mot_button.clicked.connect(self.hor_move_func)
         self.move_vert_mot_button.clicked.connect(self.vert_move_func)
         self.home_CT_mot_button.clicked.connect(self.CT_home_func)
+        self.reset_CT_mot_button.clicked.connect(self.CT_reset_func)
         self.move_CT_mot_button.clicked.connect(self.CT_move_func)
         self.open_shutter_button.clicked.connect(self.open_shutter_func)
         self.close_shutter_button.clicked.connect(self.close_shutter_func)
@@ -200,6 +203,7 @@ class GUI(QDialog):
         layout.addWidget(self.connect_shutter_button, 0, 11, 1, 1)
         layout.addWidget(self.move_CT_mot_button, 0, 3, 1, 1)
         layout.addWidget(self.home_CT_mot_button, 0, 4, 1, 1)
+        layout.addWidget(self.reset_CT_mot_button, 1, 4, 1, 1)
         layout.addWidget(self.move_vert_mot_button, 0, 6, 1, 1)
         layout.addWidget(self.move_hor_mot_button, 0, 9, 1, 1)
         layout.addWidget(self.open_shutter_button, 0, 12, 1, 1)
@@ -277,6 +281,7 @@ class GUI(QDialog):
             self.connect_CT_mot_button.setEnabled(False)
             self.move_CT_mot_button.setEnabled(True)
             self.home_CT_mot_button.setEnabled(True)
+            self.reset_CT_mot_button.setEnabled(True)
             self.scan_controls_group.inner_loop_motor.addItem(tmp)
             self.CT_mot_monitor = EpicsMonitorFloat(self.CT_motor.RBV)
             self.CT_mot_monitor.i0_state_changed_signal.connect(
@@ -517,6 +522,8 @@ class GUI(QDialog):
             # self.CT_motor.enable()
             # self.CT_mot_monitor.i0.run_callback(self.CT_mot_monitor.call_idx)
             self.CT_motor.home().join()
+            self.CT_mot_pos_move.setValue(0.0)
+            self.CT_move_func()
 
     def CT_move_func(self):
         '''Clear faults and home stage'''
@@ -525,6 +532,15 @@ class GUI(QDialog):
         else:
             self.motion_CT = MotionThread(self.CT_motor, self.CT_mot_pos_move)
             self.motion_CT.start()
+
+    def CT_reset_func(self):
+        '''Reset the stage'''
+        if self.CT_motor is None:
+            return
+        else:
+            self.CT_motor.reset()
+            self.CT_mot_pos_move.setValue(0.0)
+            self.CT_move_func()
 
     def hor_move_func(self):
         if self.hor_motor is None:
