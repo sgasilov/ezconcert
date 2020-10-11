@@ -541,6 +541,7 @@ class GUI(QDialog):
             self.CT_motor.reset()
             self.CT_mot_pos_move.setValue(0.0)
             self.CT_move_func()
+            info_message("Reset finished. Please wait for state motion to stop.")
 
     def hor_move_func(self):
         if self.hor_motor is None:
