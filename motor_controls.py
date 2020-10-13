@@ -72,3 +72,51 @@ class MotionThread(QThread):
             self.motor.abort()
         except:
             pass
+
+
+class HomeThread(QThread):
+
+    def __init__(self, motor):
+        super(HomeThread, self).__init__()
+        self.motor = motor
+        self.thread_running = True
+        atexit.register(self.stop)
+
+    def stop(self):
+        self.thread_running = False
+        self.wait()
+
+    def run(self):  # .start() calls this function
+        while self.thread_running:
+            self.motor.home().join()
+            self.thread_running = False
+
+    def abort(self):
+        try:
+            self.motor.abort()
+        except:
+            pass
+
+
+class ResetThread(QThread):
+
+    def __init__(self, motor):
+        super(ResetThread, self).__init__()
+        self.motor = motor
+        self.thread_running = True
+        atexit.register(self.stop)
+
+    def stop(self):
+        self.thread_running = False
+        self.wait()
+
+    def run(self):  # .start() calls this function
+        while self.thread_running:
+            self.motor.reset()
+            self.thread_running = False
+
+    def abort(self):
+        try:
+            self.motor.abort()
+        except:
+            pass
