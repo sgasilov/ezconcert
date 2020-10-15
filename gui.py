@@ -20,6 +20,7 @@ from scan_controls import ScanControlsGroup
 from message_dialog import info_message, error_message
 from motor_controls import EpicsMonitorFloat, EpicsMonitorFIS, MotionThread
 
+from time import sleep
 import logging
 import concert
 concert.require("0.11.0")
@@ -168,17 +169,15 @@ class GUI(QDialog):
                                                      self.scan_fps_entry, self.getflatsdarks_button, self.get180pair_button,
                                                      self.motor_inner, self.motor_outer, title="Scan controls")
         self.scan_controls_group.setEnabled(False)
-        # Thread for concert scan
+
+        self.set_layout_motor_control_group()
+        self.set_layout()
+
+        # THREADS AND SIGNALS/CONNECTIONS
         self.concert_scan = None
         self.motion_CT = None
         self.motion_vert = None
         self.motion_hor = None
-        #self.scan_thread = ConcertScanThread(viewer=self.viewer, camera=self.camera)
-        # self.scan_thread.scan_finished_signal.connect(self.end_of_scan)
-        # self.scan_thread.start()
-
-        self.set_layout_motor_control_group()
-        self.set_layout()
 
         # connect to timer and shutter and populate lists of motors
         self.connect_time_motor_func()
@@ -192,7 +191,19 @@ class GUI(QDialog):
             self.set_viewer_limits)
         self.camera_controls_group.viewer_highlim_entry.editingFinished.connect(
             self.set_viewer_limits)
+
+        # Outer loop counter
+        self.number_of_scans = 2
+
         self.show()
+
+    def enable_sync_daq_ring(self):
+        self.concert_scan.acq_setup.top_up_veto_enabled = self.ring_status_group.sync_daq_inj.isChecked()
+
+    def send_inj_info_to_acqsetup(self, value):
+        #info_message("{}".format(value))
+        self.concert_scan.acq_setup.top_up_veto_state = value
+
 
     def set_layout_motor_control_group(self):
         layout = QGridLayout()
@@ -326,6 +337,9 @@ class GUI(QDialog):
         self.scan_controls_group.setEnabled(True)
         self.ffc_controls_group.setEnabled(True)
         self.file_writer_group.setEnabled(True)
+        self.ring_status_group.status_monitor.i0_state_changed_signal2.connect(
+            self.send_inj_info_to_acqsetup)
+        self.ring_status_group.sync_daq_inj.stateChanged.connect(self.enable_sync_daq_ring)
 
     def start(self):
         self.start_button.setEnabled(False)
@@ -335,13 +349,23 @@ class GUI(QDialog):
         # and update parameters
         # of acquisitions, flat-field correction, camera, consumers, etc
         # based on the user input
-        self.set_scan_params()
+
         self.scan_controls_group.setTitle("Scan controls. Status: Scan is running")
-        self.concert_scan.start_scan()
+
+        self.doscan()
+        # for i in range(2):
+        #     self.set_scan_params()
+        #     self.concert_scan.start_scan()
+        #     #self.motor_outer['position'].set(self.motor_outer['position']+2*q.mm).join()
+        #     sleep(4)
         # must inform users if there is an attempt to overwrite data
         # that is ctsetname is not a pattern and its name has'not been change
         # since the last run. Data cannot be overwritten, but
         # Experiment will simply quite without any warnings
+
+    def doscan(self):
+        self.set_scan_params()
+        self.concert_scan.start_scan()
 
     def set_scan_params(self):
         '''To be called before Experiment.run
@@ -375,6 +399,8 @@ class GUI(QDialog):
         self.concert_scan.acq_setup.nsteps = self.scan_controls_group.inner_steps
         self.concert_scan.acq_setup.range = self.scan_controls_group.inner_range
         self.concert_scan.acq_setup.endp = self.scan_controls_group.inner_endpoint
+        self.concert_scan.acq_setup.message_entry = self.camera_controls_group.test_entry
+        self.concert_scan.acq_setup.message_entry.setText("Here")
         self.concert_scan.acq_setup.calc_step()
         # info_message("{:}".format(self.concert_scan.acq_setup.step))
         # Outer motor and scan intervals
@@ -395,38 +421,32 @@ class GUI(QDialog):
 
         # POPULATE THE LIST OF ACQUISITIONS
         acquisitions = []
-        # ffc before
-        if self.scan_controls_group.ffc_before:
-            # acquisitions.append(self.concert_scan.acq_setup.dummy_flat0_acq)
-            if self.camera_controls_group.buffered:
-                acquisitions.append(self.concert_scan.acq_setup.flats0_softr_buf)
-            else:
-                acquisitions.append(self.concert_scan.acq_setup.flats0_softr)
-            if self.ffc_controls_group.num_darks > 0:
-                if self.camera_controls_group.buffered:
-                    acquisitions.append(self.concert_scan.acq_setup.darks_softr_buf)
-                else:
-                    acquisitions.append(self.concert_scan.acq_setup.darks_softr)
-        # projections
-        if self.scan_controls_group.inner_loop_continuous.isChecked():
-            if self.camera_controls_group.trig_mode == "EXTERNAL":
-                if self.camera_controls_group.buffered:
-                    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq_buf)
-                else:
-                    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
-            else:
-                acquisitions.append(self.concert_scan.acq_setup.tomo_async_acq)
-        else:
-            if self.camera_controls_group.buffered:
-                acquisitions.append(self.concert_scan.acq_setup.tomo_softr_buf)
-            else:
-                acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
-        # ffc after
-        if self.scan_controls_group.ffc_after:
-            if self.camera_controls_group.buffered:
-                acquisitions.append(self.concert_scan.acq_setup.flats1_softr)
-            else:
-                acquisitions.append(self.concert_scan.acq_setup.flats1_softr)
+        #acquisitions.append(self.concert_scan.acq_setup.rec_seq_with_inj_sync)
+        acquisitions.append(self.concert_scan.acq_setup.flats_softr)
+        acquisitions.append(self.concert_scan.acq_setup.darks_softr)
+        acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
+        # # ffc before
+        # if self.scan_controls_group.ffc_before:
+        #     acquisitions.append(self.concert_scan.acq_setup.flats0_softr)
+        #     if self.ffc_controls_group.num_darks > 0:
+        #         acquisitions.append(self.concert_scan.acq_setup.darks_softr)
+        # # projections
+        # if self.scan_controls_group.inner_loop_continuous.isChecked():
+        #     if self.camera_controls_group.trig_mode == "EXTERNAL":
+        #         if self.camera_controls_group.buffered:
+        #             acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq_buf)
+        #         else:
+        #             acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
+        #     else:
+        #         acquisitions.append(self.concert_scan.acq_setup.tomo_async_acq)
+        # else:
+        #     if self.camera_controls_group.buffered:
+        #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr_buf)
+        #     else:
+        #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
+        # # ffc after
+        # if self.scan_controls_group.ffc_after:
+        #     acquisitions.append(self.concert_scan.acq_setup.flats1_softr)
 
         # CREATE NEW WALKER
         if self.file_writer_group.isChecked():
@@ -468,16 +488,20 @@ class GUI(QDialog):
             "Scan controls. Status: scan was aborted by user")
 
     def end_of_scan(self):
-        #### This section runs only if scan was finished normally, but not aborted ###
-        if not self.return_button.isEnabled():
-            #info_message("Scan finished")
-            self.scan_controls_group.setTitle(
-                "Scan controls. Status: scan was finished without errors")
+        self.number_of_scans -= 1
+        if self.number_of_scans:
+            self.doscan()
+        else:
+            #### This section runs only if scan was finished normally, but not aborted ###
+            if not self.return_button.isEnabled():
+                #info_message("Scan finished")
+                self.scan_controls_group.setTitle(
+                    "Scan controls. Status: scan was finished without errors")
 
-        # End of section
+            # End of section
 
-        self.start_button.setEnabled(True)
-        self.abort_button.setEnabled(False)
+            self.start_button.setEnabled(True)
+            self.abort_button.setEnabled(False)
 
     # EXECUTION CONTROL
     def check_scan_status(self):
