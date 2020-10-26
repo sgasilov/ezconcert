@@ -229,6 +229,10 @@ class CameraControlsGroup(QGroupBox):
         layout.addWidget(self.sensor_hor_bin_label, 6, 2)
         layout.addWidget(self.sensor_hor_bin_entry, 6, 3)
 
+        #temporary for testin
+        layout.addWidget(self.test_label, 7,0)
+        layout.addWidget(self.test_entry, 7, 1)
+
         self.setLayout(layout)
 
     # Convert numeric parameters

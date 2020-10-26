@@ -3,7 +3,7 @@ from random import choice
 from time import sleep
 
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject
-from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, QPushButton, QComboBox
+from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, QPushButton, QComboBox, QCheckBox
 
 from epics import PV
 from message_dialog import info_message
@@ -29,7 +29,26 @@ class RingStatusGroup(QGroupBox):
         self.epics_monitor.i0_state_changed_signal.connect(
             self.ringcurrent_entry.setText)
 
-        # Ring status
+        # expected injection in
+        self.inj_countdown_spacer = QLabel()
+        self.inj_countdown_label = QLabel()
+        self.inj_countdown_label.setText("Injection expected in [sec]")
+        self.inj_countdown_entry = QLabel()
+        self.inj_countdown_entry.setFixedWidth(50)
+        self.countdown_monitor = CountdownMonitor()
+        self.countdown_monitor.i0_state_changed_signal.connect(
+            self.inj_countdown_entry.setText)
+
+        # confirmed injection in
+        self.inj_leadtime_label = QLabel()
+        self.inj_leadtime_label.setText("Pre-Injection Lead [sec]")
+        self.inj_leadtime_entry = QLabel()
+        self.inj_leadtime_entry.setFixedWidth(50)
+        self.lead_monitor = LeadMonitor()
+        self.lead_monitor.i0_state_changed_signal.connect(
+            self.inj_leadtime_entry.setText)
+
+        # Ring status - DAQ veto
         self.ringstatus_spacer = QLabel()
         self.ringstatus_label = QLabel()
         self.ringstatus_label.setText("Veto state")
@@ -39,15 +58,8 @@ class RingStatusGroup(QGroupBox):
         self.status_monitor.i0_state_changed_signal.connect(
             self.ringstatus_entry.setText)
 
-        # injection in
-        self.inj_countdown_spacer = QLabel()
-        self.inj_countdown_label = QLabel()
-        self.inj_countdown_label.setText("Pre-Injection Lead [sec]")
-        self.inj_countdown_entry = QLabel()
-        self.inj_countdown_entry.setFixedWidth(50)
-        self.lead_monitor = LeadMonitor()
-        self.lead_monitor.i0_state_changed_signal.connect(
-            self.inj_countdown_entry.setText)
+        self.sync_daq_inj = QCheckBox("Sync. DAQ with injections")
+        self.sync_daq_inj.setChecked(False)
 
         self.set_layout()
 
@@ -57,13 +69,18 @@ class RingStatusGroup(QGroupBox):
         layout.addWidget(self.ringcurrent_label, 0, 0)
         layout.addWidget(self.ringcurrent_entry, 0, 1)
 
-        layout.addWidget(self.ringstatus_spacer, 0, 2)
-        layout.addWidget(self.ringstatus_label, 0, 3)
-        layout.addWidget(self.ringstatus_entry, 0, 4)
+        layout.addWidget(self.inj_countdown_label, 0, 2)
+        layout.addWidget(self.inj_countdown_entry, 0, 3)
 
-        layout.addWidget(self.inj_countdown_spacer, 0, 5)
-        layout.addWidget(self.inj_countdown_label, 0, 6)
-        layout.addWidget(self.inj_countdown_entry, 0, 7)
+        #layout.addWidget(self.ringstatus_spacer, 0, 2)
+        layout.addWidget(self.ringstatus_label, 0, 4)
+        layout.addWidget(self.ringstatus_entry, 0, 5)
+
+        #layout.addWidget(self.inj_countdown_spacer, 0, 5)
+        layout.addWidget(self.inj_leadtime_label, 0, 6)
+        layout.addWidget(self.inj_leadtime_entry, 0, 7)
+
+        layout.addWidget(self.sync_daq_inj, 0, 8)
 
         self.setLayout(layout)
 
@@ -87,9 +104,21 @@ class EpicsMonitor(QObject):
         self.i0_state_changed_signal.emit("{:.1f}".format(value))
 
 
+TOPUP_TIMER_PV = "TRG2400:topup:timer"
+
+class CountdownMonitor(QObject):
+    i0_state_changed_signal = pyqtSignal(str)
+
+    def __init__(self):
+        super(CountdownMonitor, self).__init__()
+        self.i0 = PV(TOPUP_TIMER_PV, callback=self.on_state_changed)
+
+    def on_state_changed(self, value, **kwargs):
+        self.i0_state_changed_signal.emit("{}".format(value))
+
+
 ID_VETO_PV = "TRG1605-1-I20-01:topup:veto"
 BM_VETO_PV = "TRG1605-1-B10-01:topup:veto"
-
 
 class StatusMonitor(QObject):
     i0_state_changed_signal = pyqtSignal(str)
