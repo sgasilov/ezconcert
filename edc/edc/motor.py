@@ -88,7 +88,7 @@ class CLSLinear(LinearMotor):
         Args:
             position (q.mm): position to move to
         """
-        self.VAL.put(position.m)
+        self.VAL.put(position.magnitude)
         self["state"].wait("moving", sleep_time=self.SLEEP_TIME, timeout=1.0 * q.s)
         self["state"].wait("standby", sleep_time=self.SLEEP_TIME)
         self._position = position
@@ -295,7 +295,7 @@ class ABRS(ContinuousRotationMotor):
         Args:
             position (quantities.q): Position, unit = deg
         """
-        self.VAL.put(position.m)
+        self.VAL.put(position.magnitude)
         try:
             self["state"].wait("moving", sleep_time=self.SLEEP_TIME, timeout=0.2 * q.s)
             self["state"].wait("standby", sleep_time=self.SLEEP_TIME)
@@ -354,7 +354,7 @@ class ABRS(ContinuousRotationMotor):
         Args:
             velocity (quantities.q): Angular velocity, unit = deg / sec
         """
-        self.VEL.put(velocity.m)
+        self.VEL.put(velocity.magnitude)
         self._stepvelocity = velocity
 
     def _cancel_stepvelocity(self):
@@ -396,7 +396,7 @@ class ABRS(ContinuousRotationMotor):
         Args:
             velocity (quantities.q): Angular velocity, unit = deg / sec
         """
-        self.VEL.put(velocity.m)
+        self.VEL.put(velocity.magnitude)
         self.FREERUN.put(1)
         busy_wait(self._is_velocity_stable, sleep_time=self.SLEEP_TIME)
         self._velocity = velocity
@@ -445,7 +445,7 @@ class ABRS(ContinuousRotationMotor):
         Args:
             angle_step (quantities.q): angle, unit = deg
         """
-        self.DELTA.put(value.m)
+        self.DELTA.put(value.magnitude)
         self._delta = value
 
     def _get_accel(self):
@@ -470,7 +470,7 @@ class ABRS(ContinuousRotationMotor):
         Args:
             accel (quantities.q): acceleration, units = deg / sec^2
         """
-        self.ACCEL.put(value.m)
+        self.ACCEL.put(value.magnitude)
         self._accel = value
 
     def scan(self, mode=1, home=False):
@@ -558,15 +558,15 @@ class ABRS(ContinuousRotationMotor):
         total = accel_dist * 3 + self.LENGTH
         # print("initial position: {:10.4f}, final position: {:10.4f}, total distance: {:10.4f}".format(init_pos, final_pos, total))
         time.sleep(delay)
-        self.EXT_CMD.put("DGLOBAL(0) = {}".format(self.stepangle.m))
+        self.EXT_CMD.put("DGLOBAL(0) = {}".format(self.stepangle.magnitude))
         time.sleep(delay)
-        self.EXT_CMD.put("DGLOBAL(1) = {}".format(-final_pos.m))
+        self.EXT_CMD.put("DGLOBAL(1) = {}".format(-final_pos.magnitude))
         time.sleep(delay)
-        self.EXT_CMD.put("DGLOBAL(2) = {}".format(-init_pos.m))
+        self.EXT_CMD.put("DGLOBAL(2) = {}".format(-init_pos.magnitude))
         time.sleep(delay)
         self.EXT_CMD.put("DGLOBAL(3) = {}".format(total))
         time.sleep(delay)
-        self.EXT_CMD.put("DGLOBAL(4) = {}".format(self.stepvelocity.m))
+        self.EXT_CMD.put("DGLOBAL(4) = {}".format(self.stepvelocity.magnitude))
         time.sleep(delay)
         self.EXT_CMD.put("DGLOBAL(5) = {}".format(5000))
         time.sleep(delay)
@@ -576,7 +576,7 @@ class ABRS(ContinuousRotationMotor):
         time.sleep(delay)
         self.EXT_CMD.put('PROGRAM RUN 4, "FixedDistWindow.bcx"')
 
-    @ async
+    @async
     def PSO_pulse(self, home=True):
         """
         PSO scan with multiple trigger signal.
@@ -600,15 +600,15 @@ class ABRS(ContinuousRotationMotor):
         total = accel_dist * 3 + self.LENGTH
         # print("initial position: {:10.4f}, final position: {:10.4f}, total distance: {:10.4f}".format(init_pos, final_pos, total))
         time.sleep(delay)
-        self.EXT_CMD.put("DGLOBAL(0) = {}".format(self.stepangle.m))
+        self.EXT_CMD.put("DGLOBAL(0) = {}".format(self.stepangle.magnitude))
         time.sleep(delay)
-        self.EXT_CMD.put("DGLOBAL(1) = {}".format(-final_pos.m))
+        self.EXT_CMD.put("DGLOBAL(1) = {}".format(-final_pos.magnitude))
         time.sleep(delay)
-        self.EXT_CMD.put("DGLOBAL(2) = {}".format(-init_pos.m))
+        self.EXT_CMD.put("DGLOBAL(2) = {}".format(-init_pos.magnitude))
         time.sleep(delay)
-        self.EXT_CMD.put("DGLOBAL(3) = {}".format(total.m))
+        self.EXT_CMD.put("DGLOBAL(3) = {}".format(total.magnitude))
         time.sleep(delay)
-        self.EXT_CMD.put("DGLOBAL(4) = {}".format(self.stepvelocity.m))
+        self.EXT_CMD.put("DGLOBAL(4) = {}".format(self.stepvelocity.magnitude))
         time.sleep(delay)
         self.EXT_CMD.put("DGLOBAL(5) = {}".format(10000))
         time.sleep(delay)
@@ -681,7 +681,7 @@ class SimMotor(dummy.LinearMotor):
             raise HardLimitError("hard-limit")
         else:
             if self.timer:
-                time.sleep(self.wait.m*abs(diff.m))
+                time.sleep(self.wait.m*abs(diff.magnitude))
             self.state = "standby"
             self._position = position
         # print("...move done")
