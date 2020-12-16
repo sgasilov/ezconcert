@@ -68,9 +68,9 @@ class ScanControlsGroup(QGroupBox):
         self.outer_loop_label = QLabel()
         self.outer_loop_label.setText("Outer loop")
         self.outer_loop_motor = QComboBox()
-        #self.outer_loop_motor.addItems(["Vertical [mm]", "Time [sec]"])
         self.outer_loop_start_entry = QLineEdit()
         self.outer_loop_steps_entry = QLineEdit()
+        self.outer_loop_steps_entry.setText("1")
         self.outer_loop_range_entry = QLineEdit()
         self.outer_loop_endpoint = QCheckBox("Include")
         self.outer_loop_continuous = QCheckBox("CONTINUOUS")
@@ -81,7 +81,6 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_label = QLabel()
         self.inner_loop_label.setText("Inner loop")
         self.inner_loop_motor = QComboBox()
-        #self.inner_loop_motor.addItems(["CT [deg]", "Time [sec]", "ACry [urad]", "Horizontal [mm]"])
         self.inner_loop_flats_0 = QCheckBox("FLATS BEFORE")
         self.inner_loop_start_entry = QLineEdit()
         self.inner_loop_start_entry.setText("0")
@@ -138,6 +137,7 @@ class ScanControlsGroup(QGroupBox):
 
         self.setLayout(layout)
 
+    # INNER LOOP
     @property
     def inner_motor(self):
         try:
@@ -171,6 +171,44 @@ class ScanControlsGroup(QGroupBox):
         return self.inner_loop_endpoint.isChecked()
 
     @property
+    def inner_cont(self):
+        return self.inner_loop_continuous.isChecked()
+
+    # OUTER LOOP
+    @property
+    def outer_motor(self):
+        try:
+            return self.outer_loop_motor.currentText()
+        except ValueError:
+            return None
+
+    @property
+    def outer_steps(self):
+        try:
+            return int(self.outer_loop_steps_entry.text())
+        except ValueError:
+            return None
+
+    @property
+    def outer_start(self):
+        try:
+            return float(self.outer_loop_start_entry.text())
+        except ValueError:
+            return None
+
+    @property
+    def outer_range(self):
+        try:
+            return int(self.outer_loop_range_entry.text())
+        except ValueError:
+            return None
+
+    @property
+    def outer_endpoint(self):
+        return self.outer_loop_endpoint.isChecked()
+
+    # Flat fields controls
+    @property
     def ffc_before(self):
         return self.inner_loop_flats_0.isChecked()
 
@@ -178,6 +216,4 @@ class ScanControlsGroup(QGroupBox):
     def ffc_after(self):
         return self.inner_loop_flats_1.isChecked()
 
-    @property
-    def inner_cont(self):
-        return self.inner_loop_continuous.isChecked()
+
