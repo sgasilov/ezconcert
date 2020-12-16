@@ -354,10 +354,10 @@ class GUI(QDialog):
 
         self.doscan()
         # for i in range(2):
-        #     self.set_scan_params()
-        #     self.concert_scan.start_scan()
-        #     #self.motor_outer['position'].set(self.motor_outer['position']+2*q.mm).join()
-        #     sleep(4)
+        #      self.set_scan_params()
+        #      self.concert_scan.start_scan()
+        #      #self.motor_outer['position'].set(self.motor_outer['position']+2*q.mm).join()
+        #      sleep(4)
         # must inform users if there is an attempt to overwrite data
         # that is ctsetname is not a pattern and its name has'not been change
         # since the last run. Data cannot be overwritten, but
@@ -488,20 +488,20 @@ class GUI(QDialog):
             "Scan controls. Status: scan was aborted by user")
 
     def end_of_scan(self):
-        self.number_of_scans -= 1
-        if self.number_of_scans:
-            self.doscan()
-        else:
+        # self.number_of_scans -= 1
+        # if self.number_of_scans:
+        #     self.doscan()
+        # else:
             #### This section runs only if scan was finished normally, but not aborted ###
-            if not self.return_button.isEnabled():
-                #info_message("Scan finished")
-                self.scan_controls_group.setTitle(
-                    "Scan controls. Status: scan was finished without errors")
+        if not self.return_button.isEnabled():
+            #info_message("Scan finished")
+            self.scan_controls_group.setTitle(
+                "Scan controls. Status: scan was finished without errors")
 
-            # End of section
+        # End of section
 
-            self.start_button.setEnabled(True)
-            self.abort_button.setEnabled(False)
+        self.start_button.setEnabled(True)
+        self.abort_button.setEnabled(False)
 
     # EXECUTION CONTROL
     def check_scan_status(self):
@@ -540,11 +540,6 @@ class GUI(QDialog):
         if self.CT_motor is None:
             return
         else:
-            # self.CT_motor.disable()
-            # self.CT_motor.faultack()
-            #self.CT_motor.EXT_CMD.put('PROGRAM RUN 1, "TCPClient.bcx"')
-            # self.CT_motor.enable()
-            # self.CT_mot_monitor.i0.run_callback(self.CT_mot_monitor.call_idx)
             self.CT_motor.home().join()
             self.CT_mot_pos_move.setValue(0.0)
             self.CT_move_func()

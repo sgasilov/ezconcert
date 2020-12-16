@@ -314,7 +314,7 @@ class ACQsetup(object):
                 self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
             self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
             self.camera.start_recording()
-            self.motor.PSO_pulse(False).join()
+            self.motor.PSO_multi(False).join()
             time.sleep(1)
             for i in range(self.nsteps):
                 yield self.camera.grab()
@@ -341,7 +341,7 @@ class ACQsetup(object):
                 self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
             self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
             self.camera.start_recording()
-            self.motor.PSO_pulse(False).join()
+            self.motor.PSO_multi(False).join()
             self.camera.stop_recording()
             self.ffcsetup.close_shutter()
             time.sleep(1)
