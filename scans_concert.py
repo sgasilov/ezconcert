@@ -200,16 +200,18 @@ class ACQsetup(object):
 
     def take_darks_softr(self):
         try:
-            if self.camera.trigger_source != 'SOFTWARE':
-                self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
             self.ffcsetup.close_shutter()
-            sleep(1) # to get rid of possible afterglow
-            if self.camera.state != 'recording':
-                self.camera.start_recording()
-                sleep(0.005)
+            sleep(1)  # to get rid of possible afterglow
         except:
-            info_message("Something is wrong in preparations for take_darks_softr")
-        #self.message_entry.setText = "xyz"#"{}".format(self.num_darks)
+            info_message("Cannot close shutter in take_darks_softr")
+        try:
+            if self.camera.state == 'recording':
+                self.camera.stop_recording()
+            self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+            self.camera.start_recording()
+            sleep(0.01)
+        except:
+            info_message("Something is wrong with setting camera params for take_darks_softr")
         try:
             for i in range(self.num_darks):
                 self.camera.trigger()
@@ -221,12 +223,15 @@ class ACQsetup(object):
 
     def take_flats_softr(self):
         try:
+            if self.camera.state == 'recording':
+                self.camera.stop_recording()
+            self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+            self.camera.start_recording()
+            sleep(0.01)
+        except:
+            info_message("Something is wrong with setting camera params in take_flats_softr")
+        try:
             self.ffcsetup.prepare_flats()
-            if self.camera.trigger_source != 'SOFTWARE':
-                self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
-            if self.camera.state != 'recording':
-                self.camera.start_recording()
-                sleep(0.005)
             self.ffcsetup.open_shutter()
         except:
             info_message("Something is wrong in preparations for take_flats_softr")
@@ -246,21 +251,23 @@ class ACQsetup(object):
         try:
             self.motor.stepvelocity = 5.0 * q.deg / q.sec
             self.ffcsetup.open_shutter()
-            if self.camera.state != 'recording':
-                self.camera.start_recording()
-                sleep(0.005)
+            if self.camera.state == 'recording':
+                self.camera.stop_recording()
+            self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+            self.camera.start_recording()
+            sleep(0.01)
         except:
             info_message("Something is wrong in preparations for take_tomo_softr")
         try:
             for pos in self.region:
-                while True:
-                    if self.top_up_veto_state:
-                        sleep(0.1)
-                    else:
-                        self.motor['position'].set(pos).join()
-                        self.camera.trigger()
-                        yield self.camera.grab()
-                        break
+                #while True:
+                #    if self.top_up_veto_state:
+                #        sleep(0.1)
+                #    else:
+                self.motor['position'].set(pos).join()
+                self.camera.trigger()
+                yield self.camera.grab()
+                #        break
         except Exception as exp:
             info_message("Something is wrong during take_tomo_softr")
         finally:
@@ -269,6 +276,7 @@ class ACQsetup(object):
             #return to start position with a small overshoot to
             #maintain unidirectional repeatability
             self.motor['position'].set(self.start-self.step).join()
+            self.camera.stop_recording()
 
     # Use software trigger. Use buffers and read during acquisition.
 

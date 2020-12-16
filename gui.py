@@ -193,7 +193,7 @@ class GUI(QDialog):
             self.set_viewer_limits)
 
         # Outer loop counter
-        self.number_of_scans = 2
+        self.number_of_scans = 1
 
         self.show()
 
@@ -298,6 +298,7 @@ class GUI(QDialog):
             self.CT_mot_monitor.i0_state_changed_signal.connect(
                 self.CT_mot_pos_label.setText)
             self.CT_mot_monitor.i0.run_callback(self.CT_mot_monitor.call_idx)
+            #self.scan_controls_group.inner_loop_motor.
 
     def connect_time_motor_func(self):
         try:
@@ -351,13 +352,8 @@ class GUI(QDialog):
         # based on the user input
 
         self.scan_controls_group.setTitle("Scan controls. Status: Scan is running")
-
+        self.number_of_scans = self.scan_controls_group.outer_steps
         self.doscan()
-        # for i in range(2):
-        #     self.set_scan_params()
-        #     self.concert_scan.start_scan()
-        #     #self.motor_outer['position'].set(self.motor_outer['position']+2*q.mm).join()
-        #     sleep(4)
         # must inform users if there is an attempt to overwrite data
         # that is ctsetname is not a pattern and its name has'not been change
         # since the last run. Data cannot be overwritten, but
@@ -481,7 +477,8 @@ class GUI(QDialog):
         # calls global Concert abort() command
         # abort concert experiment not necessarily stops motor
         self.scan_status_update_timer.stop()
-
+        if self.camera_controls_group.camera.state == 'recording':
+            self.camera_controls_group.camera.stop_recording()
         # use motor list to abort
         device_abort(m for m in self.motors.values() if m is not None)
         self.scan_controls_group.setTitle(

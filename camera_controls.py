@@ -344,6 +344,8 @@ class CameraControlsGroup(QGroupBox):
         #info_message("Live mode ON")
         self.live_on_button.setEnabled(False)
         self.live_off_button.setEnabled(True)
+        if self.camera.state == "recording":
+            self.camera.stop_recording()
         try:
             if self.camera.acquire_mode != self.camera.uca.enum_values.acquire_mode.AUTO:
                 self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
@@ -351,13 +353,17 @@ class CameraControlsGroup(QGroupBox):
                 self.camera.trigger_source = self.camera.trigger_sources.AUTO
             self.camera.buffered = False
             self.camera.exposure_time = self.exp_time * q.msec
+        except:
+            if self.camera_model_label.text() != 'Dummy camera':
+                error_message("Cannot change acquisition mode or trigger source")
+        try:
             self.camera.roi_x0 = self.roi_x0 * q.pixels
             self.camera.roi_y0 = self.roi_y0 * q.pixels
             self.camera.roi_width = self.roi_width * q.pixels
             self.camera.roi_height = self.roi_height * q.pixels
         except:
             if self.camera_model_label.text() != 'Dummy camera':
-                error_message("Cannot change acquisition mode or trigger source or ROI")
+                error_message("Cannot change ROI")
         self.camera.start_recording()
         self.live_preview_thread.live_on = True
 
