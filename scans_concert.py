@@ -20,7 +20,7 @@ from concert.coroutines.base import coroutine, inject
 from concert.experiments.addons import Consumer, ImageWriter
 from message_dialog import info_message, error_message, warning_message
 from concert.storage import DirectoryWalker
-import numpy as np
+
 
 
 def run(n, callback):
@@ -86,7 +86,7 @@ class ConcertScanThread(QThread):
             #     raise ValueError('Trigger mode must be set to AUTO')
         except:
             pass
-            #info_message("Can't set camera parameters")
+            # info_message("Can't set camera parameters")
 
         self.camera.exposure_time = exp_time * q.msec
 
@@ -127,7 +127,7 @@ class ACQsetup(object):
 
     """This is Class which holds a collection of acqusitions
     (each acquisition moves motors and get frames from camera)
-    and all parameters which acqusitions require
+    and all parameters which acquisitions require
     """
 
     def __init__(self, camera, ffcsetup):
@@ -177,11 +177,11 @@ class ACQsetup(object):
     def calc_step(self):
         if self.endp:
             self.region = np.linspace(self.start, self.range, self.nsteps) * self.units
-            #self.step = self.range / float(self.nsteps - 1)
+            # self.step = self.range / float(self.nsteps - 1)
         else:
             self.region = np.linspace(self.start, self.range,
                                       self.nsteps, False) * self.units
-            #self.step = self.range / float(self.nsteps)
+            # self.step = self.range / float(self.nsteps)
         self.step = self.region[1]-self.region[0]
 
     def finish(self):
@@ -223,6 +223,11 @@ class ACQsetup(object):
 
     def take_flats_softr(self):
         try:
+            self.ffcsetup.prepare_flats()
+            self.ffcsetup.open_shutter()
+        except:
+            info_message("Something is wrong in preparations for take_flats_softr")
+        try:
             if self.camera.state == 'recording':
                 self.camera.stop_recording()
             self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
@@ -230,11 +235,6 @@ class ACQsetup(object):
             sleep(0.01)
         except:
             info_message("Something is wrong with setting camera params in take_flats_softr")
-        try:
-            self.ffcsetup.prepare_flats()
-            self.ffcsetup.open_shutter()
-        except:
-            info_message("Something is wrong in preparations for take_flats_softr")
         try:
             for i in range(self.num_flats):
                 self.camera.trigger()
@@ -260,7 +260,7 @@ class ACQsetup(object):
             info_message("Something is wrong in preparations for take_tomo_softr")
         try:
             for pos in self.region:
-                #while True:
+                # while True:
                 #    if self.top_up_veto_state:
                 #        sleep(0.1)
                 #    else:
@@ -273,10 +273,9 @@ class ACQsetup(object):
         finally:
             self.ffcsetup.close_shutter()
             self.camera.stop_recording()
-            #return to start position with a small overshoot to
-            #maintain unidirectional repeatability
+            # return to start position with a small overshoot to
+            # maintain unidirectional repeatability
             self.motor['position'].set(self.start-self.step).join()
-            self.camera.stop_recording()
 
     # Use software trigger. Use buffers and read during acquisition.
 
@@ -293,7 +292,6 @@ class ACQsetup(object):
             for pos in self.region:
                 self.motor['position'].set(pos).join()
                 self.camera.trigger()
-
             self.camera.stop_recording()
             self.ffcsetup.close_shutter()
             self.camera.start_readout()
@@ -321,6 +319,10 @@ class ACQsetup(object):
             print("Velocity: {}, Step: {}, Range: {}".format(
                 self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
             self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
+        except Exception as exp:
+            print(exp)
+            error_message("Something is wrong in preparations for PSO scan")
+        try:
             self.camera.start_recording()
             self.motor.PSO_multi(False).join()
             time.sleep(1)

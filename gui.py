@@ -1,17 +1,16 @@
 from edc.shutter import CLSShutter
-from edc.motor import CLSLinear, ABRS, CLSAngle, SimMotor
+from edc.motor import CLSLinear, ABRS, SimMotor
 from scans_concert import ConcertScanThread
 from concert.devices.base import abort as device_abort
 from concert.storage import DirectoryWalker
 from concert.ext.viewers import PyplotImageViewer
-from concert.session.utils import ddoc, dstate, pdoc, code_of, abort
+# from concert.session.utils import ddoc, dstate, pdoc, code_of, abort
 from concert.quantities import q
 import sys
-
 from PyQt5.QtWidgets import QGroupBox, QDialog, QApplication, QGridLayout
-from PyQt5.QtWidgets import QLabel, QLineEdit, QPushButton, QComboBox, QCheckBox, QDoubleSpinBox
+from PyQt5.QtWidgets import QLabel, QPushButton, QDoubleSpinBox
+# from PyQt5.QtWidgets import QLineEdit, QComboBox, QCheckBox
 from PyQt5.QtCore import QTimer, QEventLoop
-
 from camera_controls import CameraControlsGroup
 from file_writer import FileWriterGroup
 from ffc_settings import FFCSettingsGroup
@@ -19,8 +18,7 @@ from ring_status import RingStatusGroup
 from scan_controls import ScanControlsGroup
 from message_dialog import info_message, error_message
 from motor_controls import EpicsMonitorFloat, EpicsMonitorFIS, MotionThread
-
-from time import sleep
+# from time import sleep
 import logging
 import concert
 concert.require("0.11.0")
@@ -201,7 +199,7 @@ class GUI(QDialog):
         self.concert_scan.acq_setup.top_up_veto_enabled = self.ring_status_group.sync_daq_inj.isChecked()
 
     def send_inj_info_to_acqsetup(self, value):
-        #info_message("{}".format(value))
+        # info_message("{}".format(value))
         self.concert_scan.acq_setup.top_up_veto_state = value
 
 
@@ -227,7 +225,7 @@ class GUI(QDialog):
         layout.addWidget(self.hor_mot_pos_label, 1, 8)
         layout.addWidget(self.hor_mot_pos_entry, 1, 9)
         layout.addWidget(self.shutter_label, 1, 11)
-        #layout.addWidget(self.shutter_entry, 1, 12)
+        # layout.addWidget(self.shutter_entry, 1, 12)
         self.motor_control_group.setLayout(layout)
         layout.addWidget(self.hor_mot_pos_move, 1, 9)
         layout.addWidget(self.vert_mot_pos_move, 1, 6)
@@ -270,9 +268,10 @@ class GUI(QDialog):
         if self.vert_motor is not None:
             self.vert_mot_pos_label.setText("Position [mm]")
             tmp = "Vertical [mm]"
-            self.motors[tmp] = self.hor_motor
+            self.motors[tmp] = self.vert_motor
             self.connect_vert_mot_button.setEnabled(False)
             self.move_vert_mot_button.setEnabled(True)
+            self.scan_controls_group.inner_loop_motor.addItem(tmp)
             self.scan_controls_group.outer_loop_motor.addItem(tmp)
             self.ffc_controls_group.motor_options_entry.addItem(tmp)
             self.vert_mot_monitor = EpicsMonitorFloat(self.vert_motor.RBV)
@@ -298,7 +297,7 @@ class GUI(QDialog):
             self.CT_mot_monitor.i0_state_changed_signal.connect(
                 self.CT_mot_pos_label.setText)
             self.CT_mot_monitor.i0.run_callback(self.CT_mot_monitor.call_idx)
-            #self.scan_controls_group.inner_loop_motor.
+            # self.scan_controls_group.inner_loop_motor.
 
     def connect_time_motor_func(self):
         try:
@@ -334,7 +333,7 @@ class GUI(QDialog):
             self.camera_controls_group.test_entry.setText)
         self.concert_scan.scan_finished_signal.connect(self.end_of_scan)
         self.concert_scan.start()
-        #self.camera = camera
+        # self.camera = camera
         self.scan_controls_group.setEnabled(True)
         self.ffc_controls_group.setEnabled(True)
         self.file_writer_group.setEnabled(True)
@@ -417,32 +416,32 @@ class GUI(QDialog):
 
         # POPULATE THE LIST OF ACQUISITIONS
         acquisitions = []
-        #acquisitions.append(self.concert_scan.acq_setup.rec_seq_with_inj_sync)
-        acquisitions.append(self.concert_scan.acq_setup.flats_softr)
-        acquisitions.append(self.concert_scan.acq_setup.darks_softr)
-        acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
-        # # ffc before
-        # if self.scan_controls_group.ffc_before:
-        #     acquisitions.append(self.concert_scan.acq_setup.flats0_softr)
-        #     if self.ffc_controls_group.num_darks > 0:
-        #         acquisitions.append(self.concert_scan.acq_setup.darks_softr)
-        # # projections
-        # if self.scan_controls_group.inner_loop_continuous.isChecked():
-        #     if self.camera_controls_group.trig_mode == "EXTERNAL":
-        #         if self.camera_controls_group.buffered:
-        #             acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq_buf)
-        #         else:
-        #             acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
-        #     else:
-        #         acquisitions.append(self.concert_scan.acq_setup.tomo_async_acq)
-        # else:
-        #     if self.camera_controls_group.buffered:
-        #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr_buf)
-        #     else:
-        #         acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
-        # # ffc after
-        # if self.scan_controls_group.ffc_after:
-        #     acquisitions.append(self.concert_scan.acq_setup.flats1_softr)
+        # acquisitions.append(self.concert_scan.acq_setup.rec_seq_with_inj_sync)
+        # acquisitions.append(self.concert_scan.acq_setup.flats_softr)
+        # acquisitions.append(self.concert_scan.acq_setup.darks_softr)
+        # acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
+        # ffc before
+        if self.scan_controls_group.ffc_before:
+            acquisitions.append(self.concert_scan.acq_setup.flats_softr)
+            if self.ffc_controls_group.num_darks > 0:
+                acquisitions.append(self.concert_scan.acq_setup.darks_softr)
+        # projections
+        if self.scan_controls_group.inner_loop_continuous.isChecked():
+            if self.camera_controls_group.trig_mode == "EXTERNAL":
+                if self.camera_controls_group.buffered:
+                    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq_buf)
+                else:
+                    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
+            else:
+                acquisitions.append(self.concert_scan.acq_setup.tomo_async_acq)
+        else:
+            if self.camera_controls_group.buffered:
+                acquisitions.append(self.concert_scan.acq_setup.tomo_softr_buf)
+            else:
+                acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
+        # ffc after
+        if self.scan_controls_group.ffc_after:
+            acquisitions.append(self.concert_scan.acq_setup.flats2_softr)
 
         # CREATE NEW WALKER
         if self.file_writer_group.isChecked():
@@ -489,14 +488,12 @@ class GUI(QDialog):
         # if self.number_of_scans:
         #     self.doscan()
         # else:
-            #### This section runs only if scan was finished normally, but not aborted ###
+        # This section runs only if scan was finished normally, but not aborted
         if not self.return_button.isEnabled():
-            #info_message("Scan finished")
+            # info_message("Scan finished")
             self.scan_controls_group.setTitle(
                 "Scan controls. Status: scan was finished without errors")
-
         # End of section
-
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
 
