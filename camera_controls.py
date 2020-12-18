@@ -347,25 +347,45 @@ class CameraControlsGroup(QGroupBox):
         if self.camera.state == "recording":
             self.camera.stop_recording()
         try:
-            if self.camera.acquire_mode != self.camera.uca.enum_values.acquire_mode.AUTO:
-                self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
-            if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
-                self.camera.trigger_source = self.camera.trigger_sources.AUTO
-            self.camera.buffered = False
             self.camera.exposure_time = self.exp_time * q.msec
         except:
-            if self.camera_model_label.text() != 'Dummy camera':
-                error_message("Cannot change acquisition mode or trigger source")
+            error_message("Make sure that exposure time is defined correctly")
+        if self.camera_model_label.text() == 'Dummy camera':
+            pass
+        else:
+            try:
+                if self.camera.acquire_mode != self.camera.uca.enum_values.acquire_mode.AUTO:
+                    self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
+                if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
+                    self.camera.trigger_source = self.camera.trigger_sources.AUTO
+                self.camera.buffered = False
+            except:
+                error_message("Cannot change to AUTO acq mode and AUTO trigger")
+            self.setROI()
+        self.camera.start_recording()
+        self.live_preview_thread.live_on = True
+
+    def setROI(self):
         try:
             self.camera.roi_x0 = self.roi_x0 * q.pixels
             self.camera.roi_y0 = self.roi_y0 * q.pixels
             self.camera.roi_width = self.roi_width * q.pixels
             self.camera.roi_height = self.roi_height * q.pixels
         except:
-            if self.camera_model_label.text() != 'Dummy camera':
-                error_message("Cannot change ROI")
-        self.camera.start_recording()
-        self.live_preview_thread.live_on = True
+            error_message("ROI is not correctly defined for the sensor, check multipliers and centering")
+
+    # def setdimaxROI(self):
+    #     half_height = int(self.roi_height / 4) * 2
+    #     half_width = int(self.roi_width / 4) * 2
+    #     if half_width > 1000:
+    #         half_width = 1000
+    #     if half_height > 1000:
+    #         half_height = 1000
+    #     self.camera.roi_x0 = 1000 - half_width
+    #     self.camera.roi_y0 = 1000 - half_height
+    #     self.camera.roi_width = half_width*2
+    #     self.camera.roi_height = half_height*2
+
 
     def live_off_func(self):
         #info_message("Live mode OFF")
@@ -437,30 +457,70 @@ class CameraControlsGroup(QGroupBox):
     @property
     def roi_height(self):
         try:
-            return int(self.roi_height_entry.text())
+            h = int(self.roi_height_entry.text())
         except ValueError:
-            return None
+            error_message("ROI height must be  positive integer number smaller then {}"
+                          .format(self.camera.sensor_height.magnitude))
+        if self.camera_model_label.text() == 'PCO Dimax':
+            h = int(h / 4) * 4
+            if h > 2000:
+                h = 2000
+            self.roi_height_entry.setText(str(h))
+            return h
+        else:
+            return h
 
     @property
     def roi_y0(self):
         try:
-            return int(self.roi_y0_entry.text())
+            h = int(self.roi_y0_entry.text())
         except ValueError:
-            return None
+            if self.camera_model_label.text() == 'PCO Dimax':
+                error_message("ROI height must be positive integer number divisible by 4 and smaller then {:}"
+                              .format(996))
+            else:
+                error_message("ROI height must be positive integer number smaller then {:}"
+                              .format(self.camera.sensor_height.magnitude))
+        if self.camera_model_label.text() == 'PCO Dimax':
+            h = 1000 - self.roi_height / 2
+            self.roi_y0_entry.setText(str(h))
+            return h
+        else:
+            return h
 
     @property
     def roi_x0(self):
         try:
-            return int(self.roi_x0_entry.text())
+            h = int(self.roi_x0_entry.text())
         except ValueError:
-            return None
+            if self.camera_model_label.text() == 'PCO Dimax':
+                error_message("ROI height must be positive integer number divisible by 4 and smaller then {:}"
+                              .format(996))
+            else:
+                error_message("ROI height must be positive integer number smaller then {:}"
+                              .format(self.camera.sensor_height.magnitude))
+        if self.camera_model_label.text() == 'PCO Dimax':
+            h = 1000 - self.roi_width / 2
+            self.roi_x0_entry.setText(str(h))
+            return h
+        else:
+            return h
 
     @property
     def roi_width(self):
         try:
-            return int(self.roi_width_entry.text())
+            h = int(self.roi_width_entry.text())
         except ValueError:
-            return None
+            error_message("ROI height must be  positive integer number smaller then {}"
+                          .format(self.camera.sensor_height.magnitude))
+        if self.camera_model_label.text() == 'PCO Dimax':
+            h = int(h / 4) * 4
+            if h > 2000:
+                h = 2000
+            self.roi_width_entry.setText(str(h))
+            return h
+        else:
+            return h
 
     @property
     def trig_mode(self):

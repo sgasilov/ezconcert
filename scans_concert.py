@@ -176,28 +176,14 @@ class ACQsetup(object):
 
     def calc_step(self):
         if self.endp:
-            self.region = np.linspace(self.start, self.range, self.nsteps) * self.units
-            # self.step = self.range / float(self.nsteps - 1)
+            self.region = np.linspace(self.start, self.start+self.range, self.nsteps)
         else:
-            self.region = np.linspace(self.start, self.range,
-                                      self.nsteps, False) * self.units
-            # self.step = self.range / float(self.nsteps)
+            self.region = np.linspace(self.start, self.start+self.range,
+                                      self.nsteps, False)
+        self.region *= self.units
         self.step = self.region[1]-self.region[0]
 
-    def finish(self):
-        self.x = self.start * self.units
-        # if block:
-        self.scan_param.set(self.x).join()
-        # else:
-        #    self.scan_param.set(self.x)
-
-    def move(self):
-        """Move to the next step."""
-        self.x += self.step * self.units
-        self.motor['position'].set(self.x).join()
-
     # Use software trigger
-
     def take_darks_softr(self):
         try:
             self.ffcsetup.close_shutter()

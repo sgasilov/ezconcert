@@ -56,7 +56,7 @@ class ScanControlsGroup(QGroupBox):
         self.start_label = QLabel()
         self.start_label.setText("START")
         self.steps_label = QLabel()
-        self.steps_label.setText("STEPS")
+        self.steps_label.setText("NUM POINTS")
         self.range_label = QLabel()
         self.range_label.setText("RANGE")
         self.endpoint_label = QLabel()
@@ -70,9 +70,10 @@ class ScanControlsGroup(QGroupBox):
         self.outer_loop_motor = QComboBox()
         self.outer_loop_start_entry = QLineEdit()
         self.outer_loop_steps_entry = QLineEdit()
-        self.outer_loop_steps_entry.setText("1")
+        #self.outer_loop_steps_entry.setText("0")
         self.outer_loop_range_entry = QLineEdit()
         self.outer_loop_endpoint = QCheckBox("Include")
+        self.outer_loop_endpoint.setChecked(True)
         self.outer_loop_continuous = QCheckBox("CONTINUOUS")
         self.outer_loop_continuous.setChecked(False)
         self.outer_loop_continuous.setCheckable(False)
@@ -162,7 +163,7 @@ class ScanControlsGroup(QGroupBox):
     @property
     def inner_range(self):
         try:
-            return int(self.inner_loop_range_entry.text())
+            return float(self.inner_loop_range_entry.text())
         except ValueError:
             return None
 
@@ -199,7 +200,7 @@ class ScanControlsGroup(QGroupBox):
     @property
     def outer_range(self):
         try:
-            return int(self.outer_loop_range_entry.text())
+            return float(self.outer_loop_range_entry.text())
         except ValueError:
             return None
 

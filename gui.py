@@ -21,7 +21,10 @@ from motor_controls import EpicsMonitorFloat, EpicsMonitorFIS, MotionThread
 # from time import sleep
 import logging
 import concert
+from numpy import linspace
+from time import sleep
 concert.require("0.11.0")
+
 
 
 LOG = logging.getLogger(__name__)
@@ -192,6 +195,9 @@ class GUI(QDialog):
 
         # Outer loop counter
         self.number_of_scans = 1
+        self.outer_region = []
+        self.outer_step = 0.0
+        self.outer_unit = q.mm
 
         self.show()
 
@@ -345,22 +351,78 @@ class GUI(QDialog):
         self.start_button.setEnabled(False)
         self.abort_button.setEnabled(True)
         self.return_button.setEnabled(False)
-        # before starting scan we have to create new experiment
-        # and update parameters
-        # of acquisitions, flat-field correction, camera, consumers, etc
-        # based on the user input
-
-        self.scan_controls_group.setTitle("Scan controls. Status: Scan is running")
-        self.number_of_scans = self.scan_controls_group.outer_steps
-        self.doscan()
+        self.scan_controls_group.setTitle("Scan controls. Status: Experiment is running")
+        try:
+            # computer step size of the outer loop motor
+            if self.scan_controls_group.outer_steps > 0:
+                self.number_of_scans = self.scan_controls_group.outer_steps
+                if self.scan_controls_group.outer_loop_endpoint:
+                    self.outer_region = linspace(self.scan_controls_group.outer_start,
+                                                 self.scan_controls_group.outer_start+self.scan_controls_group.outer_range,
+                                                 self.scan_controls_group.outer_steps)
+                else:
+                    self.outer_region = linspace(self.scan_controls_group.outer_start,
+                                                 self.scan_controls_group.outer_start+self.scan_controls_group.outer_range,
+                                                 self.scan_controls_group.outer_steps, False)
+                # set unit correctly (default q.mm)
+                if self.scan_controls_group.outer_motor == 'CT stage [deg]':
+                    self.outer_unit = q.deg
+                self.outer_step = self.outer_region[1] - self.outer_region[0] # dimensionless relative step
+                info_message("{:}".format(self.outer_region[0]))
+                if self.scan_controls_group.outer_motor == 'Timer [sec]':
+                    sleep(self.outer_region[0])
+                else:
+                    self.outer_region *= self.outer_unit  # absolute points with dimension
+                    self.motors[self.scan_controls_group.outer_motor]['position'].set(self.outer_region[0]).join()
+        except:
+            self.scan_controls_group.setTitle("Scan failed to start; check input and motor connections")
+            self.start_button.setEnabled(True)
+            self.abort_button.setEnabled(False)
+            error_message('Cannot initiate outer scan, check input and motor connection')
+        else:
+            self.doscan()
+        # *******************
+        # self.number_of_scans = self.scan_controls_group.outer_steps
+        # self.outer_region = linspace(self.scan_controls_group.outer_start,
+        #                              self.scan_controls_group.outer_start+self.scan_controls_group.outer_range,
+        #                              self.scan_controls_group.outer_steps)
+        # self.outer_step = self.outer_region[1] - self.outer_region[0]
+        # self.scan_controls_group.setTitle("Experiment is running; waiting to start delayed first scan")
+        # sleep(self.outer_region[0])
+        # self.scan_controls_group.setTitle("Scan is running")
+        #self.motors[self.scan_controls_group.outer_motor]['position'].set(30*q.mm).join()
+        #self.doscan()
         # must inform users if there is an attempt to overwrite data
         # that is ctsetname is not a pattern and its name has'not been change
         # since the last run. Data cannot be overwritten, but
         # Experiment will simply quite without any warnings
 
     def doscan(self):
+        # before starting scan we have to create new experiment and update parameters
+        # of acquisitions, flat-field correction, camera, consumers, etc based on the user input
         self.set_scan_params()
+        # start actual Concert experiment in concert scan thread
         self.concert_scan.start_scan()
+
+    def end_of_scan(self):
+        self.number_of_scans -= 1
+        if self.number_of_scans:
+            if self.scan_controls_group.outer_motor == 'Timer [sec]':
+                self.scan_controls_group.setTitle("Experiment is running; next scan will start soon")
+                sleep(self.outer_step)
+                self.scan_controls_group.setTitle("Scan is running")
+            else:
+                #get index of the next step
+                tmp = self.scan_controls_group.outer_steps - self.number_of_scans
+                #move motor to the next absolute position in the scan region
+                self.motors[self.scan_controls_group.outer_motor]['position'].set(self.outer_region[tmp]).join()
+            self.doscan()
+        # This section runs only if scan was finished normally, but not aborted
+        self.scan_controls_group.setTitle(
+            "Scan controls. Status: scan was finished without errors")
+        # End of section
+        self.start_button.setEnabled(True)
+        self.abort_button.setEnabled(False)
 
     def set_scan_params(self):
         '''To be called before Experiment.run
@@ -469,6 +531,7 @@ class GUI(QDialog):
         self.concert_scan.attach_viewer()
 
     def abort(self):
+        self.number_of_scans = 0
         self.concert_scan.abort_scan()
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
@@ -480,22 +543,11 @@ class GUI(QDialog):
             self.camera_controls_group.camera.stop_recording()
         # use motor list to abort
         device_abort(m for m in self.motors.values() if m is not None)
+        self.close_shutter_func()
         self.scan_controls_group.setTitle(
             "Scan controls. Status: scan was aborted by user")
 
-    def end_of_scan(self):
-        # self.number_of_scans -= 1
-        # if self.number_of_scans:
-        #     self.doscan()
-        # else:
-        # This section runs only if scan was finished normally, but not aborted
-        if not self.return_button.isEnabled():
-            # info_message("Scan finished")
-            self.scan_controls_group.setTitle(
-                "Scan controls. Status: scan was finished without errors")
-        # End of section
-        self.start_button.setEnabled(True)
-        self.abort_button.setEnabled(False)
+
 
     # EXECUTION CONTROL
     def check_scan_status(self):
