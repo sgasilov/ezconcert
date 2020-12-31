@@ -165,6 +165,8 @@ class ACQsetup(object):
         self.tomo_pso_acq_buf = Acquisition('tomo', self.take_pso_tomo_buf)
         # tests of sync with top-up inj cycles
         self.rec_seq_with_inj_sync = Acquisition('seq', self.test_rec_seq_with_sync)
+        # pulses only
+        self.ttl_acq = Acquisition('ttl', self.take_ttl_tomo)
 
 
         self.exp = None
@@ -294,14 +296,15 @@ class ACQsetup(object):
         """A generator which yields projections. Use triggers generated using PSO function from stage."""
         print("start PSO")
         try:
+            if self.camera.state == 'recording':
+                self.camera.stop_recording()
             self.ffcsetup.open_shutter()
-            self.motor.stepvelocity = self.motor.calc_vel(
-                self.nsteps, self.exp_time + self.dead_time, self.range)
-            self.motor.stepangle = float(self.range) / float(self.nsteps) * q.deg
+            self.motor['stepvelocity'].set(self.motor.calc_vel(
+                self.nsteps, self.exp_time + self.dead_time, self.range)).result()
+            self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).result()
             # can lose steps at the start so go a bit further to ensure full number of steps
             # remove this if a PSO window is used
-            self.motor.LENGTH = (self.range + 5*float(self.range) /
-                                 float(self.nsteps)) * q.deg
+            self.motor.LENGTH = self.range * q.deg
             print("Velocity: {}, Step: {}, Range: {}".format(
                 self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
             self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
@@ -310,16 +313,24 @@ class ACQsetup(object):
             error_message("Something is wrong in preparations for PSO scan")
         try:
             self.camera.start_recording()
+            sleep(0.01)
             self.motor.PSO_multi(False).join()
-            time.sleep(1)
             for i in range(self.nsteps):
                 yield self.camera.grab()
         except Exception as exp:
             print(exp)
             error_message("Problem in PSO scan")
         finally:
-            self.camera.stop_recording()
-            self.ffcsetup.close_shutter()
+            try:
+                self.camera.stop_recording()
+                self.ffcsetup.close_shutter()
+                print("change velocity")
+                self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).result()
+                print("return to start")
+                self.motor['position'].set(self.start).join()
+            except Exception as exp:
+                print(exp)
+                error_message("Something is wrong in final for PSO scan")
 
     take_pso_tomo_buf = take_pso_tomo
 
@@ -353,17 +364,59 @@ class ACQsetup(object):
     # Asynchronous
     def take_async_tomo(self):
         """A generator which yields projections. """
-        self.ffcsetup.open_shutter()
-        velocity = self.motor.calc_vel(
-            self.nsteps, self.exp_time + self.dead_time, self.range)
-        self.motor["velocity"].set(velocity).join()
-        print("constant velocity: {}".format(self.motor._is_velocity_stable()))
-        self.camera.trigger_source = self.camera.trigger_sources.AUTO
-        self.camera.buffered = False
-        with self.camera.recording():
-            time.sleep((self.range / velocity.m))
-        self.ffcsetup.close_shutter()
-        self.motor["velocity"].set(0.0 * q.deg / q.sec).join()
+        try:
+            if self.camera.state == 'recording':
+                self.camera.stop_recording()
+            self.ffcsetup.open_shutter()
+            velocity = self.motor.calc_vel(
+                self.nsteps, self.exp_time + self.dead_time, self.range)
+            self.camera.trigger_source = self.camera.trigger_sources.AUTO
+        except Exception as exp:
+            print(exp)
+            error_message("Problem in setup of async scan")
+        try:
+            self.motor["velocity"].set(velocity).join()
+            print("constant velocity: {}".format(self.motor._is_velocity_stable()))
+            #self.camera.buffered = False
+            with self.camera.recording():
+                #time.sleep((self.range / velocity.magnitude))
+                time.sleep(0.01)
+                for i in range(self.nsteps):
+                    yield self.camera.grab()
+        except Exception as exp:
+            print(exp)
+            error_message("Problem in run of async scan")
+        try:
+            self.ffcsetup.close_shutter()
+            self.motor["velocity"].set(0.0 * q.deg / q.sec).join()
+        except Exception as exp:
+            print(exp)
+            error_message("Problem in run of async scan")
+
+    # external camera control
+    # Camera is completely external and this is only moving stages and sending triggers
+    def take_ttl_tomo(self):
+        """A generator that """
+        print("TTL scan")
+        try:
+            #self.ffcsetup.prepare_flats()
+            #self.ffcsetup.open_shutter()
+            pass
+        except Exception as exp:
+            print(exp)
+            info_message("Something is wrong in preparations for take_ttl_tomo")
+        time_interval = self.exp_time + self.dead_time
+        #print("send {} ttl pulses".format(self.num_flats))
+        #self.motor.PSO_ttl(self.num_flats, time_interval.magnitude)
+        try:
+            #self.ffcsetup.close_shutter()
+            #self.ffcsetup.prepare_radios()
+            pass
+        except Exception as exp:
+            print(exp)
+            info_message("Something is wrong in preparations for take_ttl_tomo")
+
+
 
 
     # test

@@ -462,7 +462,6 @@ class GUI(QDialog):
         # info_message("{:}".format(self.concert_scan.acq_setup.step))
         # Outer motor and scan intervals
         # the outer motor scan be setup in the concert_scan to repeat exp multiple times
-
         # SET shutter
         self.concert_scan.ffc_setup.shutter = self.shutter
         # SET FFC parameters
@@ -530,6 +529,7 @@ class GUI(QDialog):
             self.concert_scan.attach_writer()
         self.concert_scan.attach_viewer()
 
+
     def abort(self):
         self.number_of_scans = 0
         self.concert_scan.abort_scan()
@@ -546,8 +546,6 @@ class GUI(QDialog):
         self.close_shutter_func()
         self.scan_controls_group.setTitle(
             "Scan controls. Status: scan was aborted by user")
-
-
 
     # EXECUTION CONTROL
     def check_scan_status(self):
@@ -583,15 +581,18 @@ class GUI(QDialog):
             self.shutter.close()
 
     def CT_home_func(self):
+        '''Home the stage'''
         if self.CT_motor is None:
             return
         else:
+            # if you move to x then home() you can't move to x
+            # setting choice to 0 at home position seems to fix this
             self.CT_motor.home().join()
             self.CT_mot_pos_move.setValue(0.0)
             self.CT_move_func()
 
     def CT_move_func(self):
-        '''Clear faults and home stage'''
+        '''Move the stage'''
         if self.CT_motor is None:
             return
         else:
@@ -600,7 +601,7 @@ class GUI(QDialog):
             self.motion_CT.start()
 
     def CT_reset_func(self):
-        '''Reset the stage'''
+        '''Reset the stage and move to home'''
         if self.CT_motor is None:
             return
         else:

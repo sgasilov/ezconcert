@@ -120,3 +120,4 @@ class ResetThread(QThread):
             self.motor.abort()
         except:
             pass
+
