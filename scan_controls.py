@@ -46,9 +46,9 @@ class ScanControlsGroup(QGroupBox):
         self.ffc_button = ffc_button
         self.p180_button = p180_button
         # FPS indicator
-        self.scan_fps_label = QLabel()
-        self.scan_fps_label.setText("Average fps")
-        self.scan_fps_entry = scan_fps_entry
+        # self.scan_fps_label = QLabel()
+        # self.scan_fps_label.setText("Average fps")
+        # self.scan_fps_entry = scan_fps_entry
 
         # "Table headers"
         self.motor_label = QLabel()
@@ -93,6 +93,7 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_flats_1 = QCheckBox("FLATS AFTER")
         self.inner_loop_continuous = QCheckBox("ON-THE-FLY")
         self.inner_loop_continuous.setChecked(False)
+        self.outer_loop_continuous.setCheckable(False)
         self.set_layout()
 
     def set_layout(self):
@@ -101,16 +102,18 @@ class ScanControlsGroup(QGroupBox):
         layout.addWidget(self.start_button, 0, 0, 1, 2)
         layout.addWidget(self.abort_button, 0, 2, 1, 2)
         layout.addWidget(self.return_button, 0, 4, 1, 2)
-        layout.addWidget(self.scan_fps_label, 0, 6)
+        # layout.addWidget(self.scan_fps_label, 0, 6)
         layout.addWidget(self.ffc_button, 0, 7)
         layout.addWidget(self.p180_button, 0, 8)
 
         # Top labels
         layout.addWidget(self.motor_label, 1, 1)
+        # layout.addWidget(self.flats_label, 1, 2)
         layout.addWidget(self.start_label, 1, 3)
         layout.addWidget(self.steps_label, 1, 4)
         layout.addWidget(self.range_label, 1, 5)
         layout.addWidget(self.endpoint_label, 1, 6)
+        # layout.addWidget(self.flats_label, 1, 7)
         layout.addWidget(self.continuous_label, 1, 8)
 
         # Outer loop
@@ -120,7 +123,7 @@ class ScanControlsGroup(QGroupBox):
         layout.addWidget(self.outer_loop_steps_entry, 2, 4)
         layout.addWidget(self.outer_loop_range_entry, 2, 5)
         layout.addWidget(self.outer_loop_endpoint, 2, 6)
-        layout.addWidget(self.outer_loop_continuous, 2, 8)
+        # layout.addWidget(self.outer_loop_continuous, 2, 8)
 
         # Inner loop
         layout.addWidget(self.inner_loop_label, 3, 0)
@@ -185,9 +188,12 @@ class ScanControlsGroup(QGroupBox):
 
     @property
     def outer_steps(self):
+        if self.outer_loop_steps_entry.text() == "":
+            return 0
         try:
             return int(self.outer_loop_steps_entry.text())
         except ValueError:
+            error_message("Number of steps must be positive integer number")
             return None
 
     @property
@@ -195,6 +201,7 @@ class ScanControlsGroup(QGroupBox):
         try:
             return float(self.outer_loop_start_entry.text())
         except ValueError:
+            error_message("Starting point must be floating point number")
             return None
 
     @property
@@ -202,6 +209,7 @@ class ScanControlsGroup(QGroupBox):
         try:
             return float(self.outer_loop_range_entry.text())
         except ValueError:
+            error_message("Range must be floating point number")
             return None
 
     @property

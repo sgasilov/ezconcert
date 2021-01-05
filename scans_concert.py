@@ -159,7 +159,7 @@ class ACQsetup(object):
         # softr
         self.tomo_softr = Acquisition('tomo', self.take_tomo_softr)
         # auto
-        self.tomo_async_acq = Acquisition('tomo', self.take_async_tomo)
+        self.tomo_dimax_acq = Acquisition('tomo', self.take_async_tomo)
         # external
         self.tomo_pso_acq = Acquisition('tomo', self.take_pso_tomo)
         self.tomo_pso_acq_buf = Acquisition('tomo', self.take_pso_tomo_buf)
@@ -167,7 +167,6 @@ class ACQsetup(object):
         self.rec_seq_with_inj_sync = Acquisition('seq', self.test_rec_seq_with_sync)
         # pulses only
         self.ttl_acq = Acquisition('ttl', self.take_ttl_tomo)
-
 
         self.exp = None
         self.top_up_veto_enabled = False
@@ -265,33 +264,6 @@ class ACQsetup(object):
             # maintain unidirectional repeatability
             self.motor['position'].set(self.start-self.step).join()
 
-    # Use software trigger. Use buffers and read during acquisition.
-
-    # Use software trigger. Use buffer and read after acquisition.
-
-    def take_tomo_softr_buf2(self):
-        """A generator which yields projections. Use buffer and read after scan"""
-        print("take tomo (buffer)")
-        try:
-            self.motor.stepvelocity = 5.0 * q.deg/q.sec
-            self.ffcsetup.open_shutter()
-            if self.camera.state != 'recording':
-                self.camera.start_recording()
-            for pos in self.region:
-                self.motor['position'].set(pos).join()
-                self.camera.trigger()
-            self.camera.stop_recording()
-            self.ffcsetup.close_shutter()
-            self.camera.start_readout()
-            for i in range(self.nsteps):
-                yield self.camera.grab()
-            self.camera.stop_readout()
-        except Exception as exp:
-            print(exp)
-            info_message("Something is wrong in take_tomo_softr_buf2")
-
-    # Use hardware trigger
-
     def take_pso_tomo(self):
         """A generator which yields projections. Use triggers generated using PSO function from stage."""
         print("start PSO")
@@ -334,7 +306,7 @@ class ACQsetup(object):
 
     take_pso_tomo_buf = take_pso_tomo
 
-    def take_pso_tomo_buf2(self):
+    def take_pso_tomo_buf(self):
         print("start PSO (buffer)")
         """A generator which yields projections. Use triggers generated using PSO function from stage. Use buffer."""
         try:
@@ -417,7 +389,30 @@ class ACQsetup(object):
             info_message("Something is wrong in preparations for take_ttl_tomo")
 
 
-
+# Asynchronous
+    def take_async_tomo2(self):
+        """A generator which yields projections. """
+        if self.camera.trigger_source != 'AUTO':
+            self.camera.trigger_source = self.camera.trigger_sources.AUTO
+        # self.ffcsetup.open_shutter()
+        # self.motor['position'].stash().join()
+        # velocity = self.motor.calc_vel(
+        #     self.nsteps, self.exp_time + self.dead_time, self.range)
+        # self.motor["velocity"].set(velocity).join()
+        # print("constant velocity: {}".format(self.motor._is_velocity_stable()))
+        with self.camera.recording():
+            time.sleep((self.nsteps*self.exp_time*1e-3)*1.05)
+        # self.ffcsetup.close_shutter()
+        # self.motor["velocity"].set(0.0 * q.deg / q.sec).join()
+        # self.motor['position'].restore()
+        # if self.camera.recorder_frames < self.nsteps:
+        #     error_message("NUmber of recorded frames is smaller then number of projections")
+        #     # return 0
+        # else:
+        self.camera.uca.start_readout()
+        for i in range(self.nsteps):
+            yield self.camera.grab()
+        self.camera.uca.stop_readout()
 
     # test
     def test_rec_seq_with_sync(self):

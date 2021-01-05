@@ -192,6 +192,7 @@ class GUI(QDialog):
             self.set_viewer_limits)
         self.camera_controls_group.viewer_highlim_entry.editingFinished.connect(
             self.set_viewer_limits)
+        self.camera_controls_group.trigger_entry.currentIndexChanged.connect(self.restrict_step_and_shoot_to_soft_trig)
 
         # Outer loop counter
         self.number_of_scans = 1
@@ -199,7 +200,15 @@ class GUI(QDialog):
         self.outer_step = 0.0
         self.outer_unit = q.mm
 
+        self.take_flats_darks_only = False
+
         self.show()
+
+    def restrict_step_and_shoot_to_soft_trig(self):
+        if self.camera_controls_group.trigger_entry.currentText() != 'SOFTWARE':
+            self.scan_controls_group.inner_loop_continuous.setChecked(True)
+        else:
+            self.scan_controls_group.inner_loop_continuous.setChecked(False)
 
     def enable_sync_daq_ring(self):
         self.concert_scan.acq_setup.top_up_veto_enabled = self.ring_status_group.sync_daq_inj.isChecked()
@@ -335,8 +344,6 @@ class GUI(QDialog):
 
     def on_camera_connected(self, camera):
         self.concert_scan = ConcertScanThread(self.viewer, camera)
-        self.concert_scan.data_changed_signal.connect(
-            self.camera_controls_group.test_entry.setText)
         self.concert_scan.scan_finished_signal.connect(self.end_of_scan)
         self.concert_scan.start()
         # self.camera = camera
@@ -348,54 +355,32 @@ class GUI(QDialog):
         self.ring_status_group.sync_daq_inj.stateChanged.connect(self.enable_sync_daq_ring)
 
     def start(self):
+        self.number_of_scans = 1 # we expect to make at least one scan
         self.start_button.setEnabled(False)
         self.abort_button.setEnabled(True)
         self.return_button.setEnabled(False)
         self.scan_controls_group.setTitle("Scan controls. Status: Experiment is running")
-        try:
-            # computer step size of the outer loop motor
-            if self.scan_controls_group.outer_steps > 0:
-                self.number_of_scans = self.scan_controls_group.outer_steps
-                if self.scan_controls_group.outer_loop_endpoint:
-                    self.outer_region = linspace(self.scan_controls_group.outer_start,
-                                                 self.scan_controls_group.outer_start+self.scan_controls_group.outer_range,
-                                                 self.scan_controls_group.outer_steps)
-                else:
-                    self.outer_region = linspace(self.scan_controls_group.outer_start,
-                                                 self.scan_controls_group.outer_start+self.scan_controls_group.outer_range,
-                                                 self.scan_controls_group.outer_steps, False)
-                # set unit correctly (default q.mm)
+        if self.scan_controls_group.outer_steps > 0:
+            # if outer scan parameters are set compute positions of the outer motor
+            if self.scan_controls_group.outer_loop_endpoint:
+                self.outer_region = linspace(self.scan_controls_group.outer_start,
+                                             self.scan_controls_group.outer_start+self.scan_controls_group.outer_range,
+                                             self.scan_controls_group.outer_steps)
+            else:
+                self.outer_region = linspace(self.scan_controls_group.outer_start,
+                                             self.scan_controls_group.outer_start+self.scan_controls_group.outer_range,
+                                             self.scan_controls_group.outer_steps, False)
+            # and make the first move
+            if self.scan_controls_group.outer_motor == 'Timer [sec]':
+                sleep(self.outer_region[0])
+            else:
                 if self.scan_controls_group.outer_motor == 'CT stage [deg]':
-                    self.outer_unit = q.deg
-                self.outer_step = self.outer_region[1] - self.outer_region[0] # dimensionless relative step
-                info_message("{:}".format(self.outer_region[0]))
-                if self.scan_controls_group.outer_motor == 'Timer [sec]':
-                    sleep(self.outer_region[0])
-                else:
-                    self.outer_region *= self.outer_unit  # absolute points with dimension
-                    self.motors[self.scan_controls_group.outer_motor]['position'].set(self.outer_region[0]).join()
-        except:
-            self.scan_controls_group.setTitle("Scan failed to start; check input and motor connections")
-            self.start_button.setEnabled(True)
-            self.abort_button.setEnabled(False)
-            error_message('Cannot initiate outer scan, check input and motor connection')
-        else:
-            self.doscan()
-        # *******************
-        # self.number_of_scans = self.scan_controls_group.outer_steps
-        # self.outer_region = linspace(self.scan_controls_group.outer_start,
-        #                              self.scan_controls_group.outer_start+self.scan_controls_group.outer_range,
-        #                              self.scan_controls_group.outer_steps)
-        # self.outer_step = self.outer_region[1] - self.outer_region[0]
-        # self.scan_controls_group.setTitle("Experiment is running; waiting to start delayed first scan")
-        # sleep(self.outer_region[0])
-        # self.scan_controls_group.setTitle("Scan is running")
-        #self.motors[self.scan_controls_group.outer_motor]['position'].set(30*q.mm).join()
-        #self.doscan()
-        # must inform users if there is an attempt to overwrite data
-        # that is ctsetname is not a pattern and its name has'not been change
-        # since the last run. Data cannot be overwritten, but
-        # Experiment will simply quite without any warnings
+                    self.outer_unit = q.deg # change unit to degrees if outer motor rotates sample
+                self.motors[self.scan_controls_group.outer_motor]['position'].\
+                    set(self.outer_region[0]*self.outer_unit).join()
+            self.number_of_scans = self.scan_controls_group.outer_steps
+        self.doscan()
+
 
     def doscan(self):
         # before starting scan we have to create new experiment and update parameters
@@ -409,13 +394,14 @@ class GUI(QDialog):
         if self.number_of_scans:
             if self.scan_controls_group.outer_motor == 'Timer [sec]':
                 self.scan_controls_group.setTitle("Experiment is running; next scan will start soon")
-                sleep(self.outer_step)
+                sleep(self.outer_region[1] - self.outer_region[0])
                 self.scan_controls_group.setTitle("Scan is running")
             else:
                 #get index of the next step
                 tmp = self.scan_controls_group.outer_steps - self.number_of_scans
                 #move motor to the next absolute position in the scan region
-                self.motors[self.scan_controls_group.outer_motor]['position'].set(self.outer_region[tmp]).join()
+                self.motors[self.scan_controls_group.outer_motor]['position'].\
+                    set(self.outer_region[tmp]*self.outer_unit).join()
             self.doscan()
         # This section runs only if scan was finished normally, but not aborted
         self.scan_controls_group.setTitle(
@@ -456,8 +442,6 @@ class GUI(QDialog):
         self.concert_scan.acq_setup.nsteps = self.scan_controls_group.inner_steps
         self.concert_scan.acq_setup.range = self.scan_controls_group.inner_range
         self.concert_scan.acq_setup.endp = self.scan_controls_group.inner_endpoint
-        self.concert_scan.acq_setup.message_entry = self.camera_controls_group.test_entry
-        self.concert_scan.acq_setup.message_entry.setText("Here")
         self.concert_scan.acq_setup.calc_step()
         # info_message("{:}".format(self.concert_scan.acq_setup.step))
         # Outer motor and scan intervals
@@ -478,31 +462,28 @@ class GUI(QDialog):
         # POPULATE THE LIST OF ACQUISITIONS
         acquisitions = []
         # acquisitions.append(self.concert_scan.acq_setup.rec_seq_with_inj_sync)
-        # acquisitions.append(self.concert_scan.acq_setup.flats_softr)
-        # acquisitions.append(self.concert_scan.acq_setup.darks_softr)
-        # acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
         # ffc before
         if self.scan_controls_group.ffc_before:
             acquisitions.append(self.concert_scan.acq_setup.flats_softr)
             if self.ffc_controls_group.num_darks > 0:
                 acquisitions.append(self.concert_scan.acq_setup.darks_softr)
         # projections
-        if self.scan_controls_group.inner_loop_continuous.isChecked():
-            if self.camera_controls_group.trig_mode == "EXTERNAL":
-                if self.camera_controls_group.buffered:
-                    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq_buf)
-                else:
-                    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
-            else:
-                acquisitions.append(self.concert_scan.acq_setup.tomo_async_acq)
-        else:
+        if self.camera_controls_group.trig_mode == "EXTERNAL":
             if self.camera_controls_group.buffered:
-                acquisitions.append(self.concert_scan.acq_setup.tomo_softr_buf)
+                acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq_buf)
             else:
-                acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
+                acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
+        elif self.camera_controls_group.trig_mode == "AUTO": #make option avaliable only when connected to DIMAX
+            acquisitions.append(self.concert_scan.acq_setup.tomo_dimax_acq)
+        else: #trig_mode is SOFTWARE and rotation is step-wise
+            acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
         # ffc after
         if self.scan_controls_group.ffc_after:
             acquisitions.append(self.concert_scan.acq_setup.flats2_softr)
+
+        # special cases when respective button is pressed
+        if self.take_flats_darks_only:
+            acquisitions = [0,1]
 
         # CREATE NEW WALKER
         if self.file_writer_group.isChecked():
