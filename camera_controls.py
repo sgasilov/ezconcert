@@ -66,9 +66,9 @@ class CameraControlsGroup(QGroupBox):
         self.live_on = False
 
         # FOR TESTING PURPOSES
-        self.test_label = QLabel()
-        self.test_label.setText("Some info for testing")
-        self.test_entry = QLabel()
+        # self.test_label = QLabel()
+        # self.test_label.setText("Some info for testing")
+        # self.test_entry = QLabel()
 
         # EXPOSURE
         self.exposure_label = QLabel()
@@ -131,10 +131,10 @@ class CameraControlsGroup(QGroupBox):
         self.buffered_entry.addItems(["NO", "YES"])
 
         # BUFFER LOCATION
-        self.buffer_location_label = QLabel()
-        self.buffer_location_label.setText("BUFFER LOCATION")
-        self.buffer_location_entry = QComboBox()
-        self.buffer_location_entry.addItems(["PC", "Camera"])
+        # self.buffer_location_label = QLabel()
+        # self.buffer_location_label.setText("BUFFER LOCATION")
+        # self.buffer_location_entry = QComboBox()
+        # self.buffer_location_entry.addItems(["PC", "Camera"])
 
         # N BUFFERS
         self.n_buffers_label = QLabel()
@@ -194,11 +194,11 @@ class CameraControlsGroup(QGroupBox):
         #layout.addWidget(self.delay_units, 3, 2)
 
         # Right column of controls
-        layout.addWidget(self.buffered_label, 1, 4)
-        layout.addWidget(self.buffered_entry, 1, 5)
+        layout.addWidget(self.buffered_label, 2, 4)
+        layout.addWidget(self.buffered_entry, 2, 5)
 
-        layout.addWidget(self.buffer_location_label, 2, 4)
-        layout.addWidget(self.buffer_location_entry, 2, 5)
+        # layout.addWidget(self.buffer_location_label, 2, 4)
+        # layout.addWidget(self.buffer_location_entry, 2, 5)
 
         layout.addWidget(self.n_buffers_label, 3, 4)
         layout.addWidget(self.n_buffers_entry, 3, 5)
@@ -230,8 +230,8 @@ class CameraControlsGroup(QGroupBox):
         layout.addWidget(self.sensor_hor_bin_entry, 6, 3)
 
         #temporary for testin
-        layout.addWidget(self.test_label, 7,0)
-        layout.addWidget(self.test_entry, 7, 1)
+        # layout.addWidget(self.test_label, 7,0)
+        # layout.addWidget(self.test_entry, 7, 1)
 
         self.setLayout(layout)
 
@@ -307,7 +307,7 @@ class CameraControlsGroup(QGroupBox):
         # identify model
         if self.camera.sensor_width.magnitude == 2000:
             self.camera_model_label.setText("PCO Dimax")
-            self.buffer_location_entry.addItems(["ON-BOARD"])
+            # self.buffer_location_entry.addItems(["ON-BOARD"])
         if self.camera.sensor_width.magnitude == 4008:
             self.camera_model_label.setText("PCO 4000")
         # set default values
@@ -546,15 +546,15 @@ class CameraControlsGroup(QGroupBox):
         except ValueError:
             return None
 
-    @property
-    def buffInPCRam(self):
-        try:
-            if self.buffer_location_entry.currentText() == "PC":
-                return True
-            else:
-                return False
-        except ValueError:
-            return None
+    # @property
+    # def buffInPCRam(self):
+    #     try:
+    #         if self.buffer_location_entry.currentText() == "PC":
+    #             return True
+    #         else:
+    #             return False
+    #     except ValueError:
+    #         return None
 
     @property
     def buffnum(self):
