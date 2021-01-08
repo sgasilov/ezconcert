@@ -159,7 +159,7 @@ class ACQsetup(object):
         # softr
         self.tomo_softr = Acquisition('tomo', self.take_tomo_softr)
         # auto
-        self.tomo_dimax_acq = Acquisition('tomo', self.take_async_tomo)
+        self.tomo_dimax_acq = Acquisition('tomo', self.take_async_tomo2)
         # external
         self.tomo_pso_acq = Acquisition('tomo', self.take_pso_tomo)
         self.tomo_pso_acq_buf = Acquisition('tomo', self.take_pso_tomo_buf)
@@ -334,8 +334,9 @@ class ACQsetup(object):
             error_message("Problem in PSO_buf scan")
 
     # Asynchronous
-    def take_async_tomo(self):
+    def take_async_tomo2(self):
         """A generator which yields projections. """
+        read_scan = False
         try:
             if self.camera.state == 'recording':
                 self.camera.stop_recording()
@@ -347,50 +348,31 @@ class ACQsetup(object):
             print(exp)
             error_message("Problem in setup of async scan")
         try:
-            self.motor["velocity"].set(velocity).join()
+            self.motor["velocity"].set(velocity).result()
             print("constant velocity: {}".format(self.motor._is_velocity_stable()))
-            #self.camera.buffered = False
-            with self.camera.recording():
-                #time.sleep((self.range / velocity.magnitude))
-                time.sleep(0.01)
+            if read_scan:
+                with self.camera.recording():
+                    time.sleep(0.01)
+                    for i in range(self.nsteps):
+                        yield self.camera.grab()
+            else:
+                with self.camera.recording():
+                    time.sleep((self.nsteps * (self.exp_time + self.dead_time) * 1e-3) * 1.05)
+                self.camera.uca.start_readout()
                 for i in range(self.nsteps):
                     yield self.camera.grab()
+                self.camera.uca.stop_readout()
         except Exception as exp:
             print(exp)
             error_message("Problem in run of async scan")
         try:
             self.ffcsetup.close_shutter()
-            self.motor["velocity"].set(0.0 * q.deg / q.sec).join()
+            self.motor["velocity"].set(0.0 * q.deg / q.sec).result()
         except Exception as exp:
             print(exp)
             error_message("Problem in run of async scan")
 
-    # external camera control
-    # Camera is completely external and this is only moving stages and sending triggers
-    def take_ttl_tomo(self):
-        """A generator that """
-        print("TTL scan")
-        try:
-            #self.ffcsetup.prepare_flats()
-            #self.ffcsetup.open_shutter()
-            pass
-        except Exception as exp:
-            print(exp)
-            info_message("Something is wrong in preparations for take_ttl_tomo")
-        time_interval = self.exp_time + self.dead_time
-        #print("send {} ttl pulses".format(self.num_flats))
-        #self.motor.PSO_ttl(self.num_flats, time_interval.magnitude)
-        try:
-            #self.ffcsetup.close_shutter()
-            #self.ffcsetup.prepare_radios()
-            pass
-        except Exception as exp:
-            print(exp)
-            info_message("Something is wrong in preparations for take_ttl_tomo")
-
-
-# Asynchronous
-    def take_async_tomo2(self):
+    def take_async_tomo(self):
         """A generator which yields projections. """
         if self.camera.trigger_source != 'AUTO':
             self.camera.trigger_source = self.camera.trigger_sources.AUTO
@@ -413,6 +395,94 @@ class ACQsetup(object):
         for i in range(self.nsteps):
             yield self.camera.grab()
         self.camera.uca.stop_readout()
+
+    # external camera control
+    # Camera is completely external and this is only moving stages and sending triggers
+    def take_ttl_tomo(self):
+        """Scan using triggers to camera. The camera is assumed to be controlled externally"""
+        # set param
+        step_scan = False
+        goto_start = True
+        if (self.exp_time + self.dead_time) < 10.0:
+            print("Time is too short for TTL pulses: {} < 10 ms")
+            return
+        # go to start
+        if goto_start:
+            try:
+                self.motor['stepvelocity'].set(5.0 * q.deg / q.sec)
+                # the motor does not always move but moving a small amount first seems
+                # to result in the movement to the start position
+                future = self.motor['position'].set(self.motor.position + 0.1).join()
+                future = self.motor['position'].set(self.start * q.deg).join()
+                result = future.result()
+            except Exception as exp:
+                print("Problem with returning to start position: {}".format(exp))
+        # flats before
+        print("Take flats before.")
+        try:
+            if self.num_flats > 0:
+                self.ffcsetup.prepare_flats(True)
+                self.ffcsetup.open_shutter(True)
+                self.motor.PSO_ttl(self.num_flats, self.exp_time + self.dead_time).result()
+                self.ffcsetup.close_shutter(True)
+                self.ffcsetup.prepare_radios(True)
+        except Exception as exp:
+            print("Problem with Flat Before: {}".format(exp))
+        # darks
+        print("Take darks.")
+        try:
+            if self.num_darks > 0:
+                self.motor.PSO_ttl(self.num_darks, self.exp_time + self.dead_time).result()
+        except Exception as exp:
+            print("Problem with Dark: {}".format(exp))
+        # take projections
+        print("Take projections.")
+        try:
+            self.ffcsetup.open_shutter().join()
+            region = np.linspace(self.start, self.range, self.nsteps) * q.deg
+            if step_scan:
+                self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).result()
+                for pos in region:
+                    self.motor.position = pos
+                    self.motor.PSO_ttl(1, self.exp_time + self.dead_time)
+            else:
+                vel = self.motor.calc_vel(
+                    self.nsteps, self.exp_time + self.dead_time, self.range)
+                if vel > 365 * q.deg / q.sec:
+                    print("Velocity is too high: {}".format(vel))
+                    return
+                self.motor['stepvelocity'].set(vel).result()
+                self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).result()
+                self.motor.LENGTH = self.range * q.deg
+                print("Velocity: {}, Step: {}, Range: {}".format(
+                    self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
+                self.motor.PSO_multi(False).join()
+                time.sleep(self.nsteps * ((self.exp_time + self.dead_time) / 1000.0) * 1.05)
+            self.ffcsetup.close_shutter()
+        except Exception as exp:
+            print("Problem with Tomo: {}".format(exp))
+        # go to start
+        if goto_start:
+            try:
+                self.motor['stepvelocity'].set(5.0 * q.deg / q.sec)
+                # the motor does not always move but moving a small amount first seems
+                # to result in the movement to the start position
+                future = self.motor['position'].set(self.motor.position + 0.1).join()
+                future = self.motor['position'].set(self.start * q.deg).join()
+                result = future.result()
+            except Exception as exp:
+                print("Problem with returning to start position: {}".format(exp))
+        # flats after
+        print("Take flats after.")
+        try:
+            if self.num_flats > 0:
+                self.ffcsetup.prepare_flats(True)
+                self.ffcsetup.open_shutter(True)
+                self.motor.PSO_ttl(self.num_flats, self.exp_time + self.dead_time).result()
+                self.ffcsetup.close_shutter(True)
+                self.ffcsetup.prepare_radios(True)
+        except Exception as exp:
+            print("Problem with Flat After: {}".format(exp))
 
     # test
     def test_rec_seq_with_sync(self):

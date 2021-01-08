@@ -53,7 +53,7 @@ def ttl_scan(acq, step_scan=False, goto_start=True):
             print("Velocity: {}, Step: {}, Range: {}".format(
                 acq.motor.stepvelocity, acq.motor.stepangle, acq.motor.LENGTH))
             acq.motor.PSO_multi(False).join()
-            time.sleep(acq.nsteps * (acq.exp_time + acq.dead_time)/1000.0 + 5)
+            time.sleep(acq.nsteps * ((acq.exp_time + acq.dead_time)/1000.0)*1.05)
         acq.ffcsetup.close_shutter()
     except Exception as exp:
         print("Problem with Tomo: {}".format(exp))

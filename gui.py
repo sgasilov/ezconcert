@@ -17,7 +17,7 @@ from ffc_settings import FFCSettingsGroup
 from ring_status import RingStatusGroup
 from scan_controls import ScanControlsGroup
 from message_dialog import info_message, error_message
-from motor_controls import EpicsMonitorFloat, EpicsMonitorFIS, MotionThread
+from motor_controls import EpicsMonitorFloat, EpicsMonitorFIS, MotionThread, HomeThread
 # from time import sleep
 import logging
 import concert
@@ -485,6 +485,11 @@ class GUI(QDialog):
         if self.take_flats_darks_only:
             acquisitions = [0,1]
 
+        # special case when ttl scan is used
+        if self.scan_controls_group.ttl_set:
+            acquisitions = []
+            acquisitions.append(self.concert_scan.acq_setup.ttl_acq)
+
         # CREATE NEW WALKER
         if self.file_writer_group.isChecked():
             self.concert_scan.walker = DirectoryWalker(root=self.file_writer_group.root_dir,
@@ -568,7 +573,11 @@ class GUI(QDialog):
         else:
             # if you move to x then home() you can't move to x
             # setting choice to 0 at home position seems to fix this
-            self.CT_motor.home().join()
+            #self.CT_motor.home().join()
+            self.motion_CT = HomeThread(self.CT_motor)
+            self.motion_CT.start()
+            # there is a behaviour that the stage will not be able to move
+            # to the same position twice in a row so reset the motion
             self.CT_mot_pos_move.setValue(0.0)
             self.CT_move_func()
 

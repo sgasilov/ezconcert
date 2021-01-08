@@ -88,7 +88,7 @@ class HomeThread(QThread):
 
     def run(self):  # .start() calls this function
         while self.thread_running:
-            self.motor.home().join()
+            self.motor.home()
             self.thread_running = False
 
     def abort(self):
