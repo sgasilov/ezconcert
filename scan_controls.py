@@ -93,7 +93,11 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_flats_1 = QCheckBox("FLATS AFTER")
         self.inner_loop_continuous = QCheckBox("ON-THE-FLY")
         self.inner_loop_continuous.setChecked(False)
-        self.outer_loop_continuous.setCheckable(False)
+
+        # TTL
+        self.ttl_scan = QCheckBox("TTL scan")
+        self.ttl_scan.setChecked(False)
+
         self.set_layout()
 
     def set_layout(self):
@@ -124,6 +128,7 @@ class ScanControlsGroup(QGroupBox):
         layout.addWidget(self.outer_loop_range_entry, 2, 5)
         layout.addWidget(self.outer_loop_endpoint, 2, 6)
         # layout.addWidget(self.outer_loop_continuous, 2, 8)
+        layout.addWidget(self.ttl_scan, 2, 8)
 
         # Inner loop
         layout.addWidget(self.inner_loop_label, 3, 0)
@@ -177,6 +182,10 @@ class ScanControlsGroup(QGroupBox):
     @property
     def inner_cont(self):
         return self.inner_loop_continuous.isChecked()
+
+    @property
+    def ttl_set(self):
+        return self.ttl_scan.isChecked()
 
     # OUTER LOOP
     @property
