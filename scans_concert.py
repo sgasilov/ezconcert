@@ -267,6 +267,7 @@ class ACQsetup(object):
     def take_pso_tomo(self):
         """A generator which yields projections. Use triggers generated using PSO function from stage."""
         LOG.debug("start PSO")
+        start = self.motor.position
         try:
             if self.camera.state == 'recording':
                 self.camera.stop_recording()
@@ -307,7 +308,8 @@ class ACQsetup(object):
             LOG.debug("change velocity")
             self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).result()
             LOG.debug("return to start")
-            self.motor['position'].set(self.start * q.deg).join()
+            self.motor['position'].set(self.motor.position + 0.1).join()
+            self.motor['position'].set(start).join()
         except Exception as exp:
             LOG.error(exp)
             error_message("Something is wrong in final for PSO scan")
