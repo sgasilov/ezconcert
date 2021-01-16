@@ -26,8 +26,18 @@ from time import sleep
 concert.require("0.11.0")
 
 
-
-LOG = logging.getLogger(__name__)
+LOG = logging.getLogger("ezconcert")
+LOG.setLevel(logging.DEBUG)
+# create handlers
+# ch = logging.StreamHandler()
+fh = logging.FileHandler('ezconcert.log')
+# formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# ch.setFormatter(formatter)
+fh.setFormatter(formatter)
+# add handlers
+# LOG.addHandler(ch)
+LOG.addHandler(fh)
 
 
 # Adam's interface EPICS-Concert interface
@@ -203,6 +213,7 @@ class GUI(QDialog):
         self.take_flats_darks_only = False
 
         self.show()
+        LOG.info("Start gui.py")
 
     def restrict_step_and_shoot_to_soft_trig(self):
         if self.camera_controls_group.trigger_entry.currentText() != 'SOFTWARE':
