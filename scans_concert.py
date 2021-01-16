@@ -412,9 +412,10 @@ class ACQsetup(object):
         step_scan = False
         goto_start = True
         if (self.exp_time + self.dead_time) < 10.0:
-            print("Time is too short for TTL pulses: {} < 10 ms")
+            error_message("Time is too short for TTL pulses: {} < 10 ms")
             return
         # go to start
+        ttime = (self.exp_time + self.dead_time) / 1000.0
         if goto_start:
             try:
                 self.motor['stepvelocity'].set(5.0 * q.deg / q.sec)
