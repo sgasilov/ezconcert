@@ -590,7 +590,7 @@ class GUI(QDialog):
             # there is a behaviour that the stage will not be able to move
             # to the same position twice in a row so reset the motion
             self.CT_mot_pos_move.setValue(0.0)
-            self.CT_move_func()
+            # self.CT_move_func()
 
     def CT_move_func(self):
         '''Move the stage'''
@@ -600,6 +600,7 @@ class GUI(QDialog):
             self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
             self.motion_CT = MotionThread(self.CT_motor, self.CT_mot_pos_move)
             self.motion_CT.start()
+
 
     def CT_reset_func(self):
         '''Reset the stage and move to home'''
