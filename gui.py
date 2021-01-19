@@ -4,6 +4,7 @@ from scans_concert import ConcertScanThread
 from concert.devices.base import abort as device_abort
 from concert.storage import DirectoryWalker
 from concert.ext.viewers import PyplotImageViewer
+from concert.base import TransitionNotAllowed
 # from concert.session.utils import ddoc, dstate, pdoc, code_of, abort
 from concert.quantities import q
 import sys
@@ -569,13 +570,19 @@ class GUI(QDialog):
         if self.shutter is None:
             return
         else:
-            self.shutter.open().join()
+            try:
+                self.shutter.open().join()
+            except TransitionNotAllowed:
+                return
 
     def close_shutter_func(self):
         if self.shutter is None:
             return
         else:
-            self.shutter.close().join()
+            try:
+                self.shutter.close().join()
+            except TransitionNotAllowed:
+                return
 
     def CT_home_func(self):
         '''Home the stage'''
