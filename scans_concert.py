@@ -272,9 +272,9 @@ class ACQsetup(object):
             if self.camera.state == 'recording':
                 self.camera.stop_recording()
             self.ffcsetup.open_shutter()
-            self.motor['stepvelocity'].set(self.motor.calc_vel(
-                self.nsteps, self.exp_time + self.dead_time, self.range)).result()
-            self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).result()
+            self.motor.stepvelocity = self.motor.calc_vel(
+                self.nsteps, self.exp_time + self.dead_time, self.range)
+            self.motor.stepangle = float(self.range) / float(self.nsteps) * q.deg
             # can lose steps at the start so go a bit further to ensure full number of steps
             # remove this if a PSO window is used
             self.motor.LENGTH = self.range * q.deg
@@ -287,7 +287,7 @@ class ACQsetup(object):
         try:
             self.camera.start_recording()
             sleep(0.01)
-            self.motor.PSO_multi(False).join()
+            self.motor.PSO_multi(False)
             # sleep(1)
             # for i in range(self.nsteps):
             #     yield self.camera.grab()
@@ -306,10 +306,10 @@ class ACQsetup(object):
             self.camera.stop_recording()
             self.ffcsetup.close_shutter()
             LOG.debug("change velocity")
-            self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).result()
+            self.motor.stepvelocity = 5.0 * q.deg / q.sec
             LOG.debug("return to start")
-            self.motor['position'].set(self.motor.position + 0.1).join()
-            self.motor['position'].set(start).join()
+            self.motor.position = self.motor.position + 0.1
+            self.motor.position = start
         except Exception as exp:
             LOG.error(exp)
             error_message("Something is wrong in final for PSO scan")
@@ -420,7 +420,7 @@ class ACQsetup(object):
         ttime = (self.exp_time + self.dead_time) / 1000.0
         if goto_start:
             try:
-                self.motor['stepvelocity'].set(5.0 * q.deg / q.sec)
+                self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
                 # the motor does not always move but moving a small amount first seems
                 # to result in the movement to the start position
                 future = self.motor['position'].set(self.motor.position + 0.1).join()
@@ -434,7 +434,7 @@ class ACQsetup(object):
             if self.num_flats > 0:
                 self.ffcsetup.prepare_flats(True)
                 self.ffcsetup.open_shutter(True)
-                self.motor.PSO_ttl(self.num_flats, self.exp_time + self.dead_time).result()
+                self.motor.PSO_ttl(self.num_flats, self.exp_time + self.dead_time).join()
                 time.sleep(ttime*self.num_flats*1.1)
                 self.ffcsetup.close_shutter(True)
                 self.ffcsetup.prepare_radios(True)
@@ -444,7 +444,7 @@ class ACQsetup(object):
         LOG.debug("Take darks.")
         try:
             if self.num_darks > 0:
-                self.motor.PSO_ttl(self.num_darks, self.exp_time + self.dead_time).result()
+                self.motor.PSO_ttl(self.num_darks, self.exp_time + self.dead_time).join()
                 time.sleep(ttime * self.num_darks * 1.1)
         except Exception as exp:
             LOG.error("Problem with Dark: {}".format(exp))

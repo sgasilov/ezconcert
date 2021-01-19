@@ -67,7 +67,7 @@ class MotionThread(QThread):
     def run(self):  # .start() calls this function
         while self.thread_running:
             try:
-                self.motor['position'].set(self.position.value() * self.motor.UNITS).join()
+                self.motor.position = self.position.value() * self.motor.UNITS
                 self.thread_running = False
             except TransitionNotAllowed:
                 error_message("Stage is moving. Wait until motion has stopped.")
@@ -94,8 +94,12 @@ class HomeThread(QThread):
 
     def run(self):  # .start() calls this function
         while self.thread_running:
-            self.motor.home()
-            self.thread_running = False
+            try:
+                self.motor.home().join()
+                self.thread_running = False
+            except TransitionNotAllowed:
+                error_message("Stage is moving. Wait until motion has stopped.")
+                self.thread_running = False
 
     def abort(self):
         try:

@@ -569,13 +569,13 @@ class GUI(QDialog):
         if self.shutter is None:
             return
         else:
-            self.shutter.open()
+            self.shutter.open().join()
 
     def close_shutter_func(self):
         if self.shutter is None:
             return
         else:
-            self.shutter.close()
+            self.shutter.close().join()
 
     def CT_home_func(self):
         '''Home the stage'''
@@ -584,7 +584,6 @@ class GUI(QDialog):
         else:
             # if you move to x then home() you can't move to x
             # setting choice to 0 at home position seems to fix this
-            #self.CT_motor.home().join()
             self.motion_CT = HomeThread(self.CT_motor)
             self.motion_CT.start()
             # there is a behaviour that the stage will not be able to move
