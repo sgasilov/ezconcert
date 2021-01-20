@@ -4,6 +4,7 @@ from scans_concert import ConcertScanThread
 from concert.devices.base import abort as device_abort
 from concert.storage import DirectoryWalker
 from concert.ext.viewers import PyplotImageViewer
+from concert.base import TransitionNotAllowed
 # from concert.session.utils import ddoc, dstate, pdoc, code_of, abort
 from concert.quantities import q
 import sys
@@ -26,8 +27,18 @@ from time import sleep
 concert.require("0.11.0")
 
 
-
-LOG = logging.getLogger(__name__)
+LOG = logging.getLogger("ezconcert")
+LOG.setLevel(logging.DEBUG)
+# create handlers
+# ch = logging.StreamHandler()
+fh = logging.FileHandler('ezconcert.log')
+# formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# ch.setFormatter(formatter)
+fh.setFormatter(formatter)
+# add handlers
+# LOG.addHandler(ch)
+LOG.addHandler(fh)
 
 
 # Adam's interface EPICS-Concert interface
@@ -203,6 +214,7 @@ class GUI(QDialog):
         self.take_flats_darks_only = False
 
         self.show()
+        LOG.info("Start gui.py")
 
     def restrict_step_and_shoot_to_soft_trig(self):
         if self.camera_controls_group.trigger_entry.currentText() != 'SOFTWARE':
@@ -558,13 +570,19 @@ class GUI(QDialog):
         if self.shutter is None:
             return
         else:
-            self.shutter.open()
+            try:
+                self.shutter.open().join()
+            except TransitionNotAllowed:
+                return
 
     def close_shutter_func(self):
         if self.shutter is None:
             return
         else:
-            self.shutter.close()
+            try:
+                self.shutter.close().join()
+            except TransitionNotAllowed:
+                return
 
     def CT_home_func(self):
         '''Home the stage'''
@@ -573,13 +591,12 @@ class GUI(QDialog):
         else:
             # if you move to x then home() you can't move to x
             # setting choice to 0 at home position seems to fix this
-            #self.CT_motor.home().join()
             self.motion_CT = HomeThread(self.CT_motor)
             self.motion_CT.start()
             # there is a behaviour that the stage will not be able to move
             # to the same position twice in a row so reset the motion
             self.CT_mot_pos_move.setValue(0.0)
-            self.CT_move_func()
+            # self.CT_move_func()
 
     def CT_move_func(self):
         '''Move the stage'''
@@ -589,6 +606,7 @@ class GUI(QDialog):
             self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
             self.motion_CT = MotionThread(self.CT_motor, self.CT_mot_pos_move)
             self.motion_CT.start()
+
 
     def CT_reset_func(self):
         '''Reset the stage and move to home'''
