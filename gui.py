@@ -76,9 +76,6 @@ class GUI(QDialog):
         self.scan_status_update_timer.timeout.connect(self.check_scan_status)
 
         # EXECUTION CONTROL BUTTONS
-        self.getflatsdarks_button = QPushButton("ACQUIRE FLATS/DARKS")
-        self.get180pair_button = QPushButton("GET 180 PAIR")
-        self.getflatsdarks_button.clicked.connect(self.getflatsdarks)
         self.start_button = QPushButton("START")
         self.start_button.clicked.connect(self.start)
         self.abort_button = QPushButton("ABORT")
@@ -172,13 +169,13 @@ class GUI(QDialog):
         self.camera_controls_group.camera_connected_signal.connect(
             self.on_camera_connected)
         self.ffc_controls_group = FFCSettingsGroup(
-            self.motor_flat, self.getflatsdarks_button, title="Flat-field correction settings")
+            self.motor_flat, title="Flat-field correction settings")
         self.ffc_controls_group.setEnabled(False)
         self.file_writer_group = FileWriterGroup(title="File-writer settings")
         self.file_writer_group.setEnabled(False)
         self.ring_status_group = RingStatusGroup(title="Ring status")
         self.scan_controls_group = ScanControlsGroup(self.start_button, self.abort_button, self.return_button,
-                                                     self.scan_fps_entry, self.getflatsdarks_button, self.get180pair_button,
+                                                     self.scan_fps_entry,
                                                      self.motor_inner, self.motor_outer, title="Scan controls")
         self.scan_controls_group.setEnabled(False)
 
@@ -204,6 +201,9 @@ class GUI(QDialog):
         self.camera_controls_group.viewer_highlim_entry.editingFinished.connect(
             self.set_viewer_limits)
         self.camera_controls_group.trigger_entry.currentIndexChanged.connect(self.restrict_step_and_shoot_to_soft_trig)
+        self.scan_controls_group.inner_loop_steps_entry.editingFinished.connect(
+            self.relate_nbuf_to_nproj)
+
 
         # Outer loop counter
         self.number_of_scans = 1
@@ -219,8 +219,16 @@ class GUI(QDialog):
     def restrict_step_and_shoot_to_soft_trig(self):
         if self.camera_controls_group.trigger_entry.currentText() != 'SOFTWARE':
             self.scan_controls_group.inner_loop_continuous.setChecked(True)
+            self.camera_controls_group.n_buffers_entry.setText( \
+                "{:}".format(self.scan_controls_group.inner_loop_steps_entry.text()))
+            if self.camera_controls_group.trigger_entry.currentText() == 'EXTERNAL':
+                tmp = self.camera_controls_group.buffered_entry.findText("YES")
+                self.camera_controls_group.buffered_entry.setCurrentIndex(tmp)
         else:
             self.scan_controls_group.inner_loop_continuous.setChecked(False)
+            tmp = self.camera_controls_group.buffered_entry.findText("NO")
+            self.camera_controls_group.buffered_entry.setCurrentIndex(tmp)
+
 
     def enable_sync_daq_ring(self):
         self.concert_scan.acq_setup.top_up_veto_enabled = self.ring_status_group.sync_daq_inj.isChecked()
@@ -493,12 +501,8 @@ class GUI(QDialog):
         if self.scan_controls_group.ffc_after:
             acquisitions.append(self.concert_scan.acq_setup.flats2_softr)
 
-        # special cases when respective button is pressed
-        if self.take_flats_darks_only:
-            acquisitions = [0,1]
-
         # special case when ttl scan is used
-        if self.scan_controls_group.ttl_set:
+        if self.camera_controls_group.ttl_scan.isChecked():
             acquisitions = []
             acquisitions.append(self.concert_scan.acq_setup.ttl_acq)
 
@@ -545,26 +549,28 @@ class GUI(QDialog):
         self.scan_controls_group.setTitle(
             "Scan controls. Status: scan was aborted by user")
 
-    # EXECUTION CONTROL
-    def check_scan_status(self):
-        if self.f.done():
-            self.end_of_scan()
-
     def return_to_position(self):
         info_message("Returning to position...")
         # info_message(result)
 
-    def getflatsdarks(self):
-        info_message("Acquiring flats and darks")
-        self.getflatsdarks_button.setEnabled(False)
-        self.getflatsdarks_button.setEnabled(True)
+    # EXECUTION CONTROL
+    def check_scan_status(self):
+        if self.f.done():
+            self.end_of_scan()
 
     def set_viewer_limits(self):
         self.camera_controls_group.viewer.limits = \
             [int(self.camera_controls_group.viewer_lowlim_entry.text()),
              int(self.camera_controls_group.viewer_highlim_entry.text())]
 
-    # motor functions
+    def relate_nbuf_to_nproj(self):
+        if self.camera_controls_group.trigger_entry.currentText() == 'EXTERNAL' or \
+                (self.camera_controls_group.trigger_entry.currentText() == 'AUTO' and\
+                 self.camera_controls_group.buffered):
+            self.camera_controls_group.n_buffers_entry.setText(\
+                "{:}".format(self.scan_controls_group.inner_loop_steps_entry.text()))
+
+    # motor functions #MUST BE MOVED TO MOTOR CONTROLS!!!
 
     def open_shutter_func(self):
         if self.shutter is None:

@@ -9,7 +9,7 @@ class FFCSettingsGroup(QGroupBox):
     Flat-field correction settings
     """
 
-    def __init__(self, motor, guibutton, *args, **kwargs):
+    def __init__(self, motor, *args, **kwargs):
         super(FFCSettingsGroup, self).__init__(*args, **kwargs)
 
         self.motor = motor
@@ -37,7 +37,7 @@ class FFCSettingsGroup(QGroupBox):
         self.numdarks_entry.setText("10")
 
         # acquire button and motor position indicators
-        self.getflatsdarks_button = guibutton
+        # self.getflatsdarks_button = guibutton
 
         self.set_layout()
 
@@ -54,7 +54,7 @@ class FFCSettingsGroup(QGroupBox):
         layout.addWidget(self.numdarks_label, 0, 8)
         layout.addWidget(self.numdarks_entry, 0, 9)
 
-        layout.addWidget(self.getflatsdarks_button, 1, 0)
+        # layout.addWidget(self.getflatsdarks_button, 1, 0)
 
         self.setLayout(layout)
 

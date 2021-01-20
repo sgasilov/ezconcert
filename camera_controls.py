@@ -4,7 +4,7 @@ from time import sleep
 
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject
 from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, \
-    QPushButton, QComboBox, QFileDialog
+    QPushButton, QComboBox, QFileDialog, QCheckBox
 
 from message_dialog import info_message, error_message, warning_message
 
@@ -65,10 +65,10 @@ class CameraControlsGroup(QGroupBox):
         self.viewer = viewer
         self.live_on = False
 
-        # FOR TESTING PURPOSES
-        # self.test_label = QLabel()
-        # self.test_label.setText("Some info for testing")
-        # self.test_entry = QLabel()
+        # external camera software switch
+        self.ttl_scan = QCheckBox("External camera controls")
+        self.ttl_scan.setChecked(False)
+        self.ttl_scan.clicked.connect(self.extcamera_switched_func)
 
         # EXPOSURE
         self.exposure_label = QLabel()
@@ -153,6 +153,7 @@ class CameraControlsGroup(QGroupBox):
         self.acq_mode_label.setText("ACQUISITION MODE")
         self.acq_mode_entry = QComboBox()
         self.acq_mode_entry.addItems(["AUTO", "EXTERNAL"])
+        self.acq_mode_entry.setEnabled(False)
 
         # PIXELRATE line 6
         self.sensor_pix_rate_label = QLabel()
@@ -178,6 +179,7 @@ class CameraControlsGroup(QGroupBox):
         layout.addWidget(self.connect_to_camera_status, 1, 1)
         layout.addWidget(self.camera_model_label, 1, 2)
         layout.addWidget(self.connect_to_dummy_camera_button, 1, 3)
+        layout.addWidget(self.ttl_scan, 1, 4)
 
         # viewer clims
         layout.addWidget(self.viewer_lowlim_label, 2, 0)
@@ -229,39 +231,7 @@ class CameraControlsGroup(QGroupBox):
         layout.addWidget(self.sensor_hor_bin_label, 6, 2)
         layout.addWidget(self.sensor_hor_bin_entry, 6, 3)
 
-        #temporary for testin
-        # layout.addWidget(self.test_label, 7,0)
-        # layout.addWidget(self.test_entry, 7, 1)
-
         self.setLayout(layout)
-
-    # Convert numeric parameters
-    # def exposure(self):
-    #     return float(self.exposure_entry.text())
-    #
-    # def delay(self):
-    #     return float(self.delay_entry.text())
-
-    # def n_buffers(self):
-    #     return int(self.n_buffers_entry.text())
-    #
-    # def entry_value(self):
-    #     return float(self.entry.text())
-    #
-    # # Return boolean for "buffered" drop-down list
-    # def buffered(self):
-    #     return self.buffered_entry.currentText() == "YES"
-    #
-    # # Return numeric index for "buffer location" drop-down lists
-    # def buffer_location(self):
-    #     return self.buffer_location_entry.currentIndex()
-    #
-    # # Return text value for other drop-down lists
-    # def trigger(self):
-    #     return self.trigger_entry.currentText()
-    #
-    # def acq_mode(self):
-    #     return self.acq_mode_entry.currentText()
 
     def connect_to_camera(self):
         """
@@ -546,22 +516,22 @@ class CameraControlsGroup(QGroupBox):
         except ValueError:
             return None
 
-    # @property
-    # def buffInPCRam(self):
-    #     try:
-    #         if self.buffer_location_entry.currentText() == "PC":
-    #             return True
-    #         else:
-    #             return False
-    #     except ValueError:
-    #         return None
-
     @property
     def buffnum(self):
         try:
             return int(self.n_buffers_entry.text())
         except ValueError:
             return None
+
+    def extcamera_switched_func(self):
+        if self.ttl_scan.isChecked():
+            self.live_on_button.setEnabled(False)
+            self.live_off_button.setEnabled(False)
+            self.save_one_image_button.setEnabled(False)
+        else:
+            self.live_on_button.setEnabled(True)
+            self.live_off_button.setEnabled(True)
+            self.save_one_image_button.setEnabled(True)
 
 
 class LivePreviewThread(QThread):
@@ -595,14 +565,3 @@ class LivePreviewThread(QThread):
 #
 #     def on_camera_state_changed(self, camera, **kwargs ):
 #         self.camera_connected_signal.emit(camera)
-
-# import time
-# import numpy as np
-#
-# def test(nframes):
-#     t1 = time.time()
-#         for i in range(nframes):
-#         camera.trigger()
-#         print np.std(camera.grab())
-#     t2 = time.time()
-#     return t2-t1
