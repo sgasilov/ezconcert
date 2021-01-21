@@ -23,7 +23,7 @@ from motor_controls import EpicsMonitorFloat, EpicsMonitorFIS, MotionThread, Hom
 import logging
 import concert
 from numpy import linspace
-from time import sleep
+import time
 concert.require("0.11.0")
 
 
@@ -74,6 +74,9 @@ class GUI(QDialog):
         self.scan_status_update_timer = QTimer()
         self.scan_status_update_timer.setInterval(1000)
         self.scan_status_update_timer.timeout.connect(self.check_scan_status)
+
+        self.total_experiment_time = QTimer()
+        self.last_inner_loop_scan_time = QTimer()
 
         # EXECUTION CONTROL BUTTONS
         self.start_button = QPushButton("START")
@@ -392,13 +395,14 @@ class GUI(QDialog):
                                              self.scan_controls_group.outer_steps, False)
             # and make the first move
             if self.scan_controls_group.outer_motor == 'Timer [sec]':
-                sleep(self.outer_region[0])
+                time.sleep(self.outer_region[0])
             else:
                 if self.scan_controls_group.outer_motor == 'CT stage [deg]':
                     self.outer_unit = q.deg # change unit to degrees if outer motor rotates sample
                 self.motors[self.scan_controls_group.outer_motor]['position'].\
                     set(self.outer_region[0]*self.outer_unit).join()
             self.number_of_scans = self.scan_controls_group.outer_steps
+        self.total_experiment_time = time.time()
         self.doscan()
 
 
@@ -414,7 +418,7 @@ class GUI(QDialog):
         if self.number_of_scans:
             if self.scan_controls_group.outer_motor == 'Timer [sec]':
                 self.scan_controls_group.setTitle("Experiment is running; next scan will start soon")
-                sleep(self.outer_region[1] - self.outer_region[0])
+                time.sleep(self.outer_region[1] - self.outer_region[0])
                 self.scan_controls_group.setTitle("Scan is running")
             else:
                 #get index of the next step
@@ -425,7 +429,8 @@ class GUI(QDialog):
             self.doscan()
         # This section runs only if scan was finished normally, but not aborted
         self.scan_controls_group.setTitle(
-            "Scan controls. Status: scan was finished without errors")
+            "Scan controls. Status: scans were finished without errors. \
+            Total acquisition time {:.2f} seconds".format(time.time() - self.total_experiment_time))
         # End of section
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
