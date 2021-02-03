@@ -79,9 +79,10 @@ class CameraControlsGroup(QGroupBox):
 
         # DELAY
         self.delay_label = QLabel()
-        self.delay_label.setText("DELAY [msec]")
+        self.delay_label.setText("Dead time [msec]")
         self.delay_entry = QLineEdit()
         self.delay_entry.setText("0")
+        self.delay_entry.setEnabled(False)
         self.delay_units = QLabel()
         self.delay_units.setText("msec")
 

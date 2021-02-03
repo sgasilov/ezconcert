@@ -1,27 +1,8 @@
-from random import choice
-from time import sleep
-
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, \
     QPushButton, QComboBox, QCheckBox
 
 from message_dialog import info_message, error_message
-from scans_concert import ConcertScanThread
-import epics
-
-
-def scan_dummy():
-    sleep(10)
-    return choice(["Scan completed", "Scan failed"])
-
-
-def abort_dummy():
-    sleep(1)
-
-
-def return_to_position_dummy():
-    sleep(5)
-    return choice(["Returned to position!", "Failed to complete motor move"])
 
 
 class ScanControlsGroup(QGroupBox):
@@ -44,12 +25,6 @@ class ScanControlsGroup(QGroupBox):
         self.start_button = start_button
         self.abort_button = abort_button
         self.return_button = return_button
-        # self.ffc_button = ffc_button
-        # self.p180_button = p180_button
-        # FPS indicator
-        # self.scan_fps_label = QLabel()
-        # self.scan_fps_label.setText("Average fps")
-        # self.scan_fps_entry = scan_fps_entry
 
         # "Table headers"
         self.motor_label = QLabel()
