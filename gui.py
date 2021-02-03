@@ -122,7 +122,8 @@ class GUI(QDialog):
 
         # THREADS (scan and motors)
         self.concert_scan = None
-        self.motors["Timer [sec]"] = None
+        # timer is created automatically in motorscontrolgroup constructor
+        self.motors["Timer [sec]"] = self.motor_control_group.time_motor
         self.scan_controls_group.inner_loop_motor.addItem("Timer [sec]")
         self.scan_controls_group.outer_loop_motor.addItem("Timer [sec]")
 
@@ -242,18 +243,26 @@ class GUI(QDialog):
                                              self.scan_controls_group.outer_steps, False)
             # and make the first move
             if self.scan_controls_group.outer_motor == 'Timer [sec]':
-                time.sleep(self.outer_region[0])
+                #time.sleep(self.outer_region[0])
+                QTimer.singleShot(self.outer_region[0] * 1000, self.continue_outer_scan)
             else:
                 if self.scan_controls_group.outer_motor == 'CT stage [deg]':
                     self.outer_unit = q.deg # change unit to degrees if outer motor rotates sample
                 self.motors[self.scan_controls_group.outer_motor]['position'].\
                     set(self.outer_region[0]*self.outer_unit).join()
-            self.number_of_scans = self.scan_controls_group.outer_steps
+                self.continue_outer_scan()
+            # self.number_of_scans = self.scan_controls_group.outer_steps
+        else:
+            self.total_experiment_time = time.time()
+            self.doscan()
+
+    def continue_outer_scan(self):
+        self.number_of_scans = self.scan_controls_group.outer_steps
         self.total_experiment_time = time.time()
         self.doscan()
 
-
     def doscan(self):
+        self.camera_controls_group.live_off_func()
         # before starting scan we have to create new experiment and update parameters
         # of acquisitions, flat-field correction, camera, consumers, etc based on the user input
         self.set_scan_params()

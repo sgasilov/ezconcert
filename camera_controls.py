@@ -44,6 +44,13 @@ class CameraControlsGroup(QGroupBox):
         self.live_off_button.clicked.connect(self.live_off_func)
         self.live_off_button.setEnabled(False)
 
+        self.save_lv_sequence_button = QPushButton("SAVE live-view sequence")
+        self.save_lv_sequence_button.clicked.connect(self.save_one_image)
+        self.save_lv_sequence_button.setEnabled(False)
+        self.nframes = 0
+
+        #self.buffer_livev
+
         self.save_one_image_button = QPushButton("SAVE 1 image")
         self.save_one_image_button.clicked.connect(self.save_one_image)
         self.save_one_image_button.setEnabled(False)

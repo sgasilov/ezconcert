@@ -21,6 +21,9 @@ class MotorsControlsGroup(QGroupBox):
         self.vert_motor = None
         self.CT_motor = None
         self.shutter = None
+        self.time_motor = None
+        self.connect_time_motor_func()
+        self.motors = [self.hor_motor, self.vert_motor, self.CT_motor, self.shutter, self.time_motor]
 
         # connect buttons
         self.connect_hor_mot_button = QPushButton("horizontal stage")
@@ -185,6 +188,13 @@ class MotorsControlsGroup(QGroupBox):
                 self.shutter_label.setText)
             self.shutter_monitor.i0.run_callback(self.shutter_monitor.call_idx)
 
+    def connect_time_motor_func(self):
+        try:
+            self.time_motor = SimMotor(1.0*q.mm)
+        except:
+            error_message("Can not connect to timer")
+
+
     def open_shutter_func(self):
         if self.shutter is None:
             return
@@ -260,14 +270,15 @@ class MotorsControlsGroup(QGroupBox):
         if self.motion_hor is not None:
             self.motion_hor.abort()
         # concert devices
-        if self.hor_motor is not None:
-            device_abort([self.hor_motor])
-        if self.vert_motor is not None:
-            device_abort([self.vert_motor])
-        if self.CT_motor is not None:
-            device_abort([self.CT_motor])
-        if self.shutter is not None:
-            device_abort([self.shutter])
+        device_abort(m for m in self.motors if m is not None)
+        # if self.hor_motor is not None:
+        #     device_abort([self.hor_motor])
+        # if self.vert_motor is not None:
+        #     device_abort([self.vert_motor])
+        # if self.CT_motor is not None:
+        #     device_abort([self.CT_motor])
+        # if self.shutter is not None:
+        #     device_abort([self.shutter])
 
 class EpicsMonitorFloat(QObject):
     i0_state_changed_signal = pyqtSignal(str)
