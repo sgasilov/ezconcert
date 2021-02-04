@@ -238,10 +238,11 @@ class ACQsetup(object):
         start = self.motor.position
         try:
             LOG.info("Start tomo_softr")
-            if (self.nsteps == 2):
-                self.motor['stepvelocity'].set(50.0 * q.deg / q.sec).join()
-            else:
-                self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
+            if self.motor.name.startswith('ABRS'):
+                if (self.nsteps == 2):
+                    self.motor['stepvelocity'].set(50.0 * q.deg / q.sec).join()
+                else:
+                    self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
             self.ffcsetup.open_shutter()
             if self.camera.state == 'recording':
                 self.camera.stop_recording()
@@ -273,7 +274,8 @@ class ACQsetup(object):
             # self.motor['position'].set(self.start-self.step).join()
             LOG.debug("return to start")
             self.motor['position'].set(start).join()
-            self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
+            if self.motor.name.startswith('ABRS'):
+                self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
         except Exception as exp:
             LOG.error(exp)
             info_message("Something is wrong in final in tomo_softr")
