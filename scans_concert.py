@@ -197,13 +197,15 @@ class ACQsetup(object):
             self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
             self.camera.start_recording()
             sleep(0.01)
-        except:
+        except Exception as exp:
+            LOG.error(exp)
             info_message("Something is wrong with setting camera params for take_darks_softr")
         try:
             for i in range(self.num_darks):
                 self.camera.trigger()
                 yield self.camera.grab()
         except Exception as exp:
+            LOG.error(exp)
             info_message("Something is wrong in take_darks_softr")
         finally:
             self.camera.stop_recording()
@@ -212,7 +214,8 @@ class ACQsetup(object):
         try:
             self.ffcsetup.prepare_flats()
             self.ffcsetup.open_shutter()
-        except:
+        except Exception as exp:
+            LOG.error(exp)
             info_message("Something is wrong in preparations for take_flats_softr")
         try:
             if self.camera.state == 'recording':
@@ -220,13 +223,15 @@ class ACQsetup(object):
             self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
             self.camera.start_recording()
             sleep(0.01)
-        except:
+        except Exception as exp:
+            LOG.error(exp)
             info_message("Something is wrong with setting camera params in take_flats_softr")
         try:
             for i in range(self.num_flats):
                 self.camera.trigger()
                 yield self.camera.grab()
         except Exception as exp:
+            LOG.error(exp)
             info_message("Something is wrong during acquisition of flats")
         finally:
             self.camera.stop_recording()
@@ -235,9 +240,9 @@ class ACQsetup(object):
 
     def take_tomo_softr(self):
         """A generator which yields projections."""
+        LOG.info("Start software triggerd scan")
         start = self.motor.position
         try:
-            LOG.info("Start tomo_softr")
             if self.motor.name.startswith('ABRS'):
                 if (self.nsteps == 2):
                     self.motor['stepvelocity'].set(50.0 * q.deg / q.sec).join()
@@ -369,6 +374,8 @@ class ACQsetup(object):
             velocity = self.motor.calc_vel(
                 self.nsteps, self.exp_time + self.dead_time, self.range)
             self.camera.trigger_source = self.camera.trigger_sources.AUTO
+            LOG.debug("Velocity: {}, Range: {}".format(
+                self.motor.stepvelocity, self.motor.LENGTH))
         except Exception as exp:
             LOG.error(exp)
             error_message("Problem in setup of async scan")
@@ -390,12 +397,12 @@ class ACQsetup(object):
         except Exception as exp:
             LOG.error(exp)
             error_message("Problem in run of async scan")
-        try:
-            self.ffcsetup.close_shutter()
-            self.motor["velocity"].set(0.0 * q.deg / q.sec).result()
-        except Exception as exp:
-            LOG.debug(exp)
-            error_message("Problem in run of async scan")
+        # try:
+        #     self.ffcsetup.close_shutter()
+        #     self.motor["velocity"].set(0.0 * q.deg / q.sec).result()
+        # except Exception as exp:
+        #     LOG.debug(exp)
+        #     error_message("Problem in run of async scan")
 
     def take_async_tomo(self):
         """A generator which yields projections. """
@@ -425,6 +432,7 @@ class ACQsetup(object):
     # Camera is completely external and this is only moving stages and sending triggers
     def take_ttl_tomo(self):
         """Scan using triggers to camera. The camera is assumed to be controlled externally"""
+        LOG.info("start TTL scan")
         # set param
         step_scan = False
         goto_start = True
