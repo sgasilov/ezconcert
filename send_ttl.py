@@ -9,10 +9,10 @@ Usage:
     send_ttl.py --version
 
 Options:
-    -h | --help    Show this screen.
-      --version    Show version.
-          <num>    Number of pulses.
-          <gap>    Interval between pulses (ms).
+    -h --help    Show this screen.
+    --version    Show version.
+        <num>    Number of pulses.
+        <gap>    Interval between pulses (ms).
 """
 
 from edc.motor import ABRS
