@@ -235,10 +235,13 @@ class ACQsetup(object):
 
     def take_tomo_softr(self):
         """A generator which yields projections."""
+        start = self.motor.position
         try:
             LOG.info("Start tomo_softr")
-            start = self.motor.position
-            self.motor.stepvelocity = 5.0 * q.deg / q.sec
+            if (self.nsteps == 2):
+                self.motor['stepvelocity'].set(50.0 * q.deg / q.sec).join()
+            else:
+                self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
             self.ffcsetup.open_shutter()
             if self.camera.state == 'recording':
                 self.camera.stop_recording()
@@ -269,9 +272,8 @@ class ACQsetup(object):
             # maintain unidirectional repeatability
             # self.motor['position'].set(self.start-self.step).join()
             LOG.debug("return to start")
-            # self.motor.position = self.motor.position + 0.1
-            # self.motor.position = start
             self.motor['position'].set(start).join()
+            self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
         except Exception as exp:
             LOG.error(exp)
             info_message("Something is wrong in final in tomo_softr")
@@ -320,8 +322,7 @@ class ACQsetup(object):
             LOG.debug("change velocity")
             self.motor.stepvelocity = 5.0 * q.deg / q.sec
             LOG.debug("return to start")
-            self.motor.position = self.motor.position + 0.1
-            self.motor.position = start
+            self.motor['position'].set(start).join()
         except Exception as exp:
             LOG.error(exp)
             error_message("Something is wrong in final for PSO scan")
