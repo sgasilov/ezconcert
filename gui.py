@@ -35,11 +35,11 @@ concert.require("0.11.0")
 LOG = logging.getLogger("ezconcert")
 LOG.setLevel(logging.DEBUG)
 # create handlers
-# ch = logging.StreamHandler()
+ch = logging.StreamHandler()
 fh = logging.FileHandler('ezconcert.log')
 # formatter
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-# ch.setFormatter(formatter)
+ch.setFormatter(formatter)
 fh.setFormatter(formatter)
 # add handlers
 # LOG.addHandler(ch)

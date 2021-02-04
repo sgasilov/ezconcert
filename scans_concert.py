@@ -236,6 +236,8 @@ class ACQsetup(object):
     def take_tomo_softr(self):
         """A generator which yields projections."""
         try:
+            LOG.info("Start tomo_softr")
+            start = self.motor.position
             self.motor.stepvelocity = 5.0 * q.deg / q.sec
             self.ffcsetup.open_shutter()
             if self.camera.state == 'recording':
@@ -243,8 +245,9 @@ class ACQsetup(object):
             self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
             self.camera.start_recording()
             sleep(0.01)
-        except:
-            info_message("Something is wrong in preparations for take_tomo_softr")
+        except Exception as exp:
+            LOG.error(exp)
+            info_message("Something is wrong in preparations for tomo_softr")
         try:
             for pos in self.region:
                 # while True:
@@ -256,13 +259,22 @@ class ACQsetup(object):
                 yield self.camera.grab()
                 #        break
         except Exception as exp:
-            info_message("Something is wrong during take_tomo_softr")
-        finally:
+            LOG.error(exp)
+            info_message("Something is wrong during tomo_softr")
+        try:
             self.ffcsetup.close_shutter()
-            self.camera.stop_recording()
+            if self.camera.state == 'recording':
+                self.camera.stop_recording()
             # return to start position with a small overshoot to
             # maintain unidirectional repeatability
-            self.motor['position'].set(self.start-self.step).join()
+            # self.motor['position'].set(self.start-self.step).join()
+            LOG.debug("return to start")
+            # self.motor.position = self.motor.position + 0.1
+            # self.motor.position = start
+            self.motor['position'].set(start).join()
+        except Exception as exp:
+            LOG.error(exp)
+            info_message("Something is wrong in final in tomo_softr")
 
     def take_pso_tomo(self):
         """A generator which yields projections. Use triggers generated using PSO function from stage."""
