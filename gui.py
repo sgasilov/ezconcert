@@ -287,7 +287,7 @@ class GUI(QDialog):
         # This section runs only if scan was finished normally, but not aborted
         self.scan_controls_group.setTitle(
             "Scan controls. Status: scans were finished without errors. \
-            Total acquisition time {:.2f} seconds".format(time.time() - self.total_experiment_time))
+            Total acquisition time {:d} seconds".format(time.time() - self.total_experiment_time))
         # End of section
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
