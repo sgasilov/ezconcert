@@ -1,11 +1,13 @@
 # Adam's Concert-EPICS interface
+import os
+
 from edc.shutter import CLSShutter
 from edc.motor import CLSLinear, ABRS, SimMotor
 # PyQT imports
 from PyQt5.QtWidgets import QGroupBox, QDialog, QApplication, QGridLayout
 from PyQt5.QtWidgets import QLabel, QPushButton, QDoubleSpinBox
 # from PyQt5.QtWidgets import QLineEdit, QComboBox, QCheckBox
-from PyQt5.QtCore import QTimer, QEventLoop
+from PyQt5.QtCore import QTimer, QEventLoop, QFile, QTextStream
 # GUI groups and objects
 from camera_controls import CameraControlsGroup
 from motor_controls import MotorsControlsGroup
@@ -30,6 +32,9 @@ import concert
 # Miscellaneous imports
 from numpy import linspace
 import time
+# Dark style
+# noinspection PyUnresolvedReferences
+from styles.breeze import styles_breeze
 
 concert.require("0.11.0")
 LOG = logging.getLogger("ezconcert")
@@ -440,9 +445,14 @@ class GUI(QDialog):
                 "{:}".format(self.scan_controls_group.inner_loop_steps_entry.text()))
 
 
-
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     loop = QEventLoop(app)
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    style_file = QFile(os.path.join(root_dir, "styles/breeze/dark.qss"))
+    style_file.open(QFile.ReadOnly | QFile.Text)
+    stream = QTextStream(style_file)
+    # Set application style to dark; Comment following line to unset
+    app.setStyleSheet(stream.readAll())
     ex = GUI()
     sys.exit(app.exec_())
