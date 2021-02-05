@@ -190,20 +190,25 @@ class GUI(QDialog):
         self.shutter = self.motor_control_group.shutter
 
     def restrict_params_depending_on_trigger(self):
-        if self.camera_controls_group.trigger_entry.currentText() != 'SOFTWARE':
-            self.camera_controls_group.delay_entry.setEnabled(False)
-            self.scan_controls_group.inner_loop_continuous.setChecked(True)
-            self.camera_controls_group.n_buffers_entry.setText( \
-                "{:}".format(self.scan_controls_group.inner_loop_steps_entry.text()))
-            if self.camera_controls_group.trigger_entry.currentText() == 'EXTERNAL':
+        # select continious or step and shoot scans and
+        # enable/disable buffer.
+        tmp = self.camera_controls_group.buffered_entry.findText("NO")
+        self.camera_controls_group.buffered_entry.setCurrentIndex(tmp)
+        self.camera_controls_group.delay_entry.setEnabled(True)
+        self.scan_controls_group.inner_loop_continuous.setChecked(True)
+        # options:
+        if self.camera_controls_group.trigger_entry.currentText() == 'SOFTWARE':
+            self.scan_controls_group.inner_loop_continuous.setChecked(False)
+        if self.camera_controls_group.trigger_entry.currentText() == 'EXTERNAL'\
+            and self.camera_controls_group.camera_model_label == 'PCO Edge':
                 tmp = self.camera_controls_group.buffered_entry.findText("YES")
                 self.camera_controls_group.buffered_entry.setCurrentIndex(tmp)
-                self.camera_controls_group.delay_entry.setEnabled(True)
-        else:
+                self.camera_controls_group.n_buffers_entry.setText( \
+                    "{:}".format(self.scan_controls_group.inner_loop_steps_entry.text()))
+        # delays can be used in ext and soft trig in case of slow read-out/data transfer
+        # and to let motor stabilize but they are not used in AUTO scans
+        if self.camera_controls_group.trigger_entry.currentText() == 'AUTO':
             self.camera_controls_group.delay_entry.setEnabled(False)
-            self.scan_controls_group.inner_loop_continuous.setChecked(False)
-            tmp = self.camera_controls_group.buffered_entry.findText("NO")
-            self.camera_controls_group.buffered_entry.setCurrentIndex(tmp)
 
 
     def enable_sync_daq_ring(self):
@@ -224,6 +229,7 @@ class GUI(QDialog):
         self.ring_status_group.status_monitor.i0_state_changed_signal2.connect(
             self.send_inj_info_to_acqsetup)
         self.ring_status_group.sync_daq_inj.stateChanged.connect(self.enable_sync_daq_ring)
+
 
     def start(self):
         self.number_of_scans = 1 # we expect to make at least one scan
@@ -287,7 +293,7 @@ class GUI(QDialog):
         # This section runs only if scan was finished normally, but not aborted
         self.scan_controls_group.setTitle(
             "Scan controls. Status: scans were finished without errors. \
-            Total acquisition time {:d} seconds".format(time.time() - self.total_experiment_time))
+            Total acquisition time {:} seconds".format(int(time.time() - self.total_experiment_time)))
         # End of section
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
@@ -301,11 +307,10 @@ class GUI(QDialog):
         # since reference to libuca object was getting lost and camera is passed
         # though a signal, its parameters are changed by means of a function rather
         # then directly setting them from GUI
-        self.concert_scan.set_camera_params(self.camera_controls_group.trig_mode,
-                                            self.camera_controls_group.acq_mode,
-                                            self.camera_controls_group.buffered,
+        self.concert_scan.set_camera_params(self.camera_controls_group.buffered,
                                             self.camera_controls_group.buffnum,
                                             self.camera_controls_group.exp_time,
+                                            self.camera_controls_group.fps,
                                             self.camera_controls_group.roi_x0,
                                             self.camera_controls_group.roi_width,
                                             self.camera_controls_group.roi_y0,

@@ -68,27 +68,27 @@ class ConcertScanThread(QThread):
     def attach_viewer(self):
         self.cons_viewer = Consumer(self.exp.acquisitions, self.viewer)
 
-    def set_camera_params(self, trig_mode, acq_mode,
+    def set_camera_params(self,
                           buf, bufnum,
-                          exp_time, x0, width, y0, height):
-        try:
-            self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+                          exp_time, fps,
+                          x0, width, y0, height):
+        if self.camera.acquire_mode != self.camera.uca.enum_values.acquire_mode.AUTO:
             self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
+        try:
+            self.camera.exposure_time = exp_time * q.msec
+            self.camera.frame_rate = fps * q.hertz
             self.camera.buffered = buf
             self.camera.num_buffers = bufnum
             self.camera.roi_x0 = x0 * q.pixels
             self.camera.roi_y0 = y0 * q.pixels
             self.camera.roi_width = width * q.pixels
             self.camera.roi_height = height * q.pixels
-            # if camera.acquire_mode != camera.uca.enum_values.acquire_mode.EXTERNAL:
-            #     raise ValueError('Acquire mode must be set to EXTERNAL')
-            # if camera.trigger_source != camera.trigger_sources.AUTO:
-            #     raise ValueError('Trigger mode must be set to AUTO')
         except:
-            pass
-            # info_message("Can't set camera parameters")
+            error_message("Can not set camera parameters")
+            self.abort_scan()
 
-        self.camera.exposure_time = exp_time * q.msec
+
+
 
     def stop(self):
         self.thread_running = False

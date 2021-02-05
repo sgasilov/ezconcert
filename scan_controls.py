@@ -77,6 +77,7 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_flats_1 = QCheckBox("After")
         self.inner_loop_continuous = QCheckBox("On-the-fly")
         self.inner_loop_continuous.setChecked(False)
+        self.inner_loop_continuous.setEnabled(False)
 
         # TTL
         self.ttl_scan = QCheckBox("TTL scan")
