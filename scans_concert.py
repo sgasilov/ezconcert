@@ -173,7 +173,7 @@ class ACQsetup(object):
         self.top_up_veto_state = False
         self.message_entry = None
 
-        self.timer
+        self.timer = QTimer()
 
     # HELPER FUNCTIONS
 
@@ -444,6 +444,40 @@ class ACQsetup(object):
         for i in range(self.nsteps):
             yield self.camera.grab()
         self.camera.uca.stop_readout()
+
+    def tomo_on_the_fly_par_readout_Dimax(self):
+        """A generator which yields projections. """
+        LOG.info("start async scan")
+        read_scan = False
+        if self.camera.state == 'recording':
+            self.camera.stop_recording()
+        if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
+            self.camera.trigger_source = self.camera.trigger_sources.AUTO
+        try:
+            self.ffcsetup.open_shutter()
+        except Exception as exp:
+            LOG.error(exp)
+            error_message("Cannot open shutter")
+        velocity = 180 * q.deg / (self.nsteps / self.camera.frame_rate)
+        LOG.debug("Velocity: {}, Range: {}".format(
+            self.motor.stepvelocity, self.motor.LENGTH))
+
+        self.motor["velocity"].set(velocity).result()
+        # parallel read out possible: Dimax mode: RECORDER + RING BUFFER:
+        # self.camera.start_recording():
+        #     QTimer.singleShot((self.nsteps / self.camera.frame_rate) * 1050, self.continue_outer_scan)
+        # # the recording must be start for X seconds in a separate thread
+        # # QTimer, single shot?
+        # # in acqusition we will start to grab frame shortly after recording has begun
+        # # parallel read-out not possible: Dimax mode SEQUENCE:
+        # with self.camera.recording():
+        #     time.sleep((self.nsteps / self.camera.frame_rate) * 1.05)
+        # self.ffcsetup.close_shutter()
+        # self.motor["velocity"].set(0.0 * q.deg / q.sec).result()
+        # self.camera.uca.start_readout()
+        # for i in range(self.nsteps):
+        #     yield self.camera.grab()
+        # self.camera.uca.stop_readout()
 
     # external camera control
     # Camera is completely external and this is only moving stages and sending triggers
