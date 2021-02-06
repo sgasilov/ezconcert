@@ -363,14 +363,14 @@ class GUI(QDialog):
             else:
                 acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
         elif self.camera_controls_group.trig_mode == "AUTO": #make option avaliable only when connected to DIMAX
-            velocitymax = tomo_max_speed(self.setup.camera.roi_width,
-                                      self.setup.camera.frame_rate)
-            velocity = 180 * q.deg / (self.scan_controls_group.inner_loop_steps_entry
-                                      / self.camera_controls_group.fps)
-            if velocity > velocitymax:
-                warning_message("Rotation speed is too large for this sensor width. \
-                                Reduce fps or increase exposure time \
-                                to avoid blurring.")
+            # velocitymax = tomo_max_speed(self.setup.camera.roi_width,
+            #                           self.setup.camera.frame_rate)
+            # velocity = self.scan_controls_group.inner_range * q.deg / (self.scan_controls_group.inner_loop_steps_entry
+            #                           / self.camera_controls_group.fps)
+            # if velocity > velocitymax:
+            #     warning_message("Rotation speed is too large for this sensor width. \
+            #                     Reduce fps or increase exposure time \
+            #                     to avoid blurring.")
             acquisitions.append(self.concert_scan.acq_setup.tomo_dimax_acq)
         else: #trig_mode is SOFTWARE and rotation is step-wise
             acquisitions.append(self.concert_scan.acq_setup.tomo_softr)

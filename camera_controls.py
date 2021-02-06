@@ -166,7 +166,7 @@ class CameraControlsGroup(QGroupBox):
         self.trigger_label = QLabel()
         self.trigger_label.setText("TRIGGER")
         self.trigger_entry = QComboBox()
-        self.trigger_entry.addItems(["SOFTWARE", "AUTO", "EXTERNAL"])
+        self.trigger_entry.addItems(["AUTO", "SOFTWARE", "EXTERNAL"])
 
         # ACQUISITION MODE
         self.acq_mode_label = QLabel()

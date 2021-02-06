@@ -76,7 +76,7 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_endpoint = QCheckBox("Include")
         self.inner_loop_flats_1 = QCheckBox("After")
         self.inner_loop_continuous = QCheckBox("On-the-fly")
-        self.inner_loop_continuous.setChecked(False)
+        self.inner_loop_continuous.setChecked(True)
         self.inner_loop_continuous.setEnabled(False)
 
         # TTL

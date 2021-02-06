@@ -159,7 +159,8 @@ class ACQsetup(object):
         # softr
         self.tomo_softr = Acquisition('tomo', self.take_tomo_softr)
         # auto
-        self.tomo_dimax_acq = Acquisition('tomo', self.take_async_tomo2)
+        #self.tomo_dimax_acq = Acquisition('tomo', self.take_async_tomo2)
+        self.tomo_dimax_acq = Acquisition('tomo', self.tomo_on_the_fly_seq_readout_Dimax)
         # external
         self.tomo_pso_acq = Acquisition('tomo', self.take_pso_tomo)
         self.tomo_pso_acq_buf = Acquisition('tomo', self.take_pso_tomo_buf)
@@ -425,19 +426,14 @@ class ACQsetup(object):
         except Exception as exp:
             LOG.error(exp)
             error_message("Cannot open shutter")
-        velocity = 180 * q.deg / (self.nsteps / self.camera.frame_rate)
+        velocity = self.range * q.deg / (self.nsteps / self.camera.frame_rate)
         LOG.debug("Velocity: {}, Range: {}".format(
             self.motor.stepvelocity, self.motor.LENGTH))
 
         self.motor["velocity"].set(velocity).result()
-        # parallel read out possible: Dimax mode: RECORDER + RING BUFFER:
-        #self.camera.start_recording():
-            # the recording must be start for X seconds in a separate thread
-            # QTimer, single shot?
-            # in acqusition we will start to grab frame shortly after recording has begun
         # parallel read-out not possible: Dimax mode SEQUENCE:
         with self.camera.recording():
-            time.sleep((self.nsteps / self.camera.frame_rate) * 1.05)
+            time.sleep(self.nsteps / float(self.camera.frame_rate.magnitude) * 1.05)
         self.ffcsetup.close_shutter()
         self.motor["velocity"].set(0.0 * q.deg / q.sec).result()
         self.camera.uca.start_readout()
@@ -446,6 +442,7 @@ class ACQsetup(object):
         self.camera.uca.stop_readout()
 
     def tomo_on_the_fly_par_readout_Dimax(self):
+        # parallel read out possible: Dimax mode: RECORDER + RING BUFFER:
         """A generator which yields projections. """
         LOG.info("start async scan")
         read_scan = False
@@ -464,12 +461,19 @@ class ACQsetup(object):
 
         self.motor["velocity"].set(velocity).result()
         # parallel read out possible: Dimax mode: RECORDER + RING BUFFER:
-        # self.camera.start_recording():
-        #     QTimer.singleShot((self.nsteps / self.camera.frame_rate) * 1050, self.continue_outer_scan)
-        # # the recording must be start for X seconds in a separate thread
-        # # QTimer, single shot?
-        # # in acqusition we will start to grab frame shortly after recording has begun
-        # # parallel read-out not possible: Dimax mode SEQUENCE:
+        self.camera.start_recording()
+        self.timer.singleShot((self.nsteps / self.camera.frame_rate) * 1050, self.stop_rotation_and_close_shutter)
+
+    def stop_rotation_and_close_shutter(self):
+        self.ffcsetup.close_shutter()
+        self.motor["velocity"].set(0.0 * q.deg / q.sec).result()
+        self.timer.singleShot(60e3, self.stop_camera)
+
+    def stop_camera(self):
+        self.camera.stop_recording()
+
+        #Q - if I stop recording can I continue to read-out?
+
         # with self.camera.recording():
         #     time.sleep((self.nsteps / self.camera.frame_rate) * 1.05)
         # self.ffcsetup.close_shutter()
@@ -478,6 +482,10 @@ class ACQsetup(object):
         # for i in range(self.nsteps):
         #     yield self.camera.grab()
         # self.camera.uca.stop_readout()
+
+
+
+
 
     # external camera control
     # Camera is completely external and this is only moving stages and sending triggers
