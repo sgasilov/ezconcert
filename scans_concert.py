@@ -173,6 +173,8 @@ class ACQsetup(object):
         self.top_up_veto_state = False
         self.message_entry = None
 
+        self.timer
+
     # HELPER FUNCTIONS
 
     def calc_step(self):
@@ -410,25 +412,34 @@ class ACQsetup(object):
         #     LOG.debug(exp)
         #     error_message("Problem in run of async scan")
 
-    def take_async_tomo(self):
+    def tomo_on_the_fly_seq_readout_Dimax(self):
         """A generator which yields projections. """
-        if self.camera.trigger_source != 'AUTO':
+        LOG.info("start async scan")
+        read_scan = False
+        if self.camera.state == 'recording':
+            self.camera.stop_recording()
+        if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
             self.camera.trigger_source = self.camera.trigger_sources.AUTO
-        # self.ffcsetup.open_shutter()
-        # self.motor['position'].stash().join()
-        # velocity = self.motor.calc_vel(
-        #     self.nsteps, self.exp_time + self.dead_time, self.range)
-        # self.motor["velocity"].set(velocity).join()
-        # LOG.debug("constant velocity: {}".format(self.motor._is_velocity_stable()))
+        try:
+            self.ffcsetup.open_shutter()
+        except Exception as exp:
+            LOG.error(exp)
+            error_message("Cannot open shutter")
+        velocity = 180 * q.deg / (self.nsteps / self.camera.frame_rate)
+        LOG.debug("Velocity: {}, Range: {}".format(
+            self.motor.stepvelocity, self.motor.LENGTH))
+
+        self.motor["velocity"].set(velocity).result()
+        # parallel read out possible: Dimax mode: RECORDER + RING BUFFER:
+        #self.camera.start_recording():
+            # the recording must be start for X seconds in a separate thread
+            # QTimer, single shot?
+            # in acqusition we will start to grab frame shortly after recording has begun
+        # parallel read-out not possible: Dimax mode SEQUENCE:
         with self.camera.recording():
-            time.sleep((self.nsteps*self.exp_time*1e-3)*1.05)
-        # self.ffcsetup.close_shutter()
-        # self.motor["velocity"].set(0.0 * q.deg / q.sec).join()
-        # self.motor['position'].restore()
-        # if self.camera.recorder_frames < self.nsteps:
-        #     error_message("NUmber of recorded frames is smaller then number of projections")
-        #     # return 0
-        # else:
+            time.sleep((self.nsteps / self.camera.frame_rate) * 1.05)
+        self.ffcsetup.close_shutter()
+        self.motor["velocity"].set(0.0 * q.deg / q.sec).result()
         self.camera.uca.start_readout()
         for i in range(self.nsteps):
             yield self.camera.grab()

@@ -15,13 +15,14 @@ from file_writer import FileWriterGroup
 from ffc_settings import FFCSettingsGroup
 from ring_status import RingStatusGroup
 from scan_controls import ScanControlsGroup
-from message_dialog import info_message, error_message
+from message_dialog import info_message, error_message, warning_message
 from motor_controls import EpicsMonitorFloat, EpicsMonitorFIS, MotionThread, HomeThread
 from scans_concert import ConcertScanThread
 from on_the_fly_reco_settings import RecoSettingsGroup
 # Concert imports
 from concert.storage import DirectoryWalker
 from concert.ext.viewers import PyplotImageViewer
+from concert.experiments.imaging import (tomo_projections_number, tomo_max_speed, frames)
 from concert.base import TransitionNotAllowed
 # from concert.session.utils import ddoc, dstate, pdoc, code_of, abort
 from concert.quantities import q
@@ -362,6 +363,14 @@ class GUI(QDialog):
             else:
                 acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
         elif self.camera_controls_group.trig_mode == "AUTO": #make option avaliable only when connected to DIMAX
+            velocitymax = tomo_max_speed(self.setup.camera.roi_width,
+                                      self.setup.camera.frame_rate)
+            velocity = 180 * q.deg / (self.scan_controls_group.inner_loop_steps_entry
+                                      / self.camera_controls_group.fps)
+            if velocity > velocitymax:
+                warning_message("Rotation speed is too large for this sensor width. \
+                                Reduce fps or increase exposure time \
+                                to avoid blurring.")
             acquisitions.append(self.concert_scan.acq_setup.tomo_dimax_acq)
         else: #trig_mode is SOFTWARE and rotation is step-wise
             acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
@@ -453,6 +462,6 @@ if __name__ == '__main__':
     style_file.open(QFile.ReadOnly | QFile.Text)
     stream = QTextStream(style_file)
     # Set application style to dark; Comment following line to unset
-    app.setStyleSheet(stream.readAll())
+    # app.setStyleSheet(stream.readAll())
     ex = GUI()
     sys.exit(app.exec_())
