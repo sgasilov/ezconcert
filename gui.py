@@ -48,7 +48,7 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 ch.setFormatter(formatter)
 fh.setFormatter(formatter)
 # add handlers
-# LOG.addHandler(ch)
+LOG.addHandler(ch)
 LOG.addHandler(fh)
 
 
@@ -148,15 +148,15 @@ class GUI(QDialog):
         self.scan_controls_group.inner_loop_steps_entry.editingFinished.connect(
             self.relate_nbuf_to_nproj)
         # populate motors dictionary when physical device is connected
-        # self.motor_control_group.connect_hor_mot_button.clicked.connect(self.add_mot_hor)
-        # self.motor_control_group.connect_vert_mot_button.clicked.connect(self.add_mot_vert)
-        # self.motor_control_group.connect_CT_mot_button.clicked.connect(self.add_mot_CT)
-        # self.motor_control_group.connect_shutter_button.clicked.connect(self.add_mot_sh)
+        self.motor_control_group.connect_hor_mot_button.clicked.connect(self.add_mot_hor)
+        self.motor_control_group.connect_vert_mot_button.clicked.connect(self.add_mot_vert)
+        self.motor_control_group.connect_CT_mot_button.clicked.connect(self.add_mot_CT)
+        self.motor_control_group.connect_shutter_button.clicked.connect(self.add_mot_sh)
         # add motors automatically on start
-        self.motor_control_group.connect_hor_motor_func()
-        self.motor_control_group.connect_CT_motor_func()
-        self.motor_control_group.connect_vert_motor_func()
-        self.motor_control_group.connect_shutter_func()
+        # self.motor_control_group.connect_hor_motor_func()
+        # self.motor_control_group.connect_CT_motor_func()
+        # self.motor_control_group.connect_vert_motor_func()
+        # self.motor_control_group.connect_shutter_func()
 
         # finally
         self.set_layout()
@@ -327,12 +327,7 @@ class GUI(QDialog):
                                                 self.camera_controls_group.roi_width,
                                                 self.camera_controls_group.roi_y0,
                                                 self.camera_controls_group.roi_height)
-        else:
-            self.concert_scan.acq_setup.ttl_exp_time = self.camera_controls_group.exp_time
-            self.concert_scan.acq_setup.ttl_dead_time = self.camera_controls_group.dead_time
-
-
-        # SET ACQUISION PARAMETERS
+        # SET ACQUISITION PARAMETERS
         # Times as floating point numbers [msec] to compute the CT stage motion
         self.concert_scan.acq_setup.dead_time = self.camera_controls_group.dead_time
         self.concert_scan.acq_setup.exp_time = self.camera_controls_group.exp_time
