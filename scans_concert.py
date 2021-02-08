@@ -33,8 +33,8 @@ class ConcertScanThread(QThread):
     """
     Holds camera+viewer+viewer consumer and walker+write consumers
     Creates Concert Experiment and attaches consumers to it
-    Acqusitions are selected from a collection of acquisitions predefined in Radiography class
-    Acquisitons are functions which move motors and control camera
+    Acquisitions are selected from a collection of acquisitions predefined in Radiography class
+    Acquisitions are functions which move motors and control camera
     Experiment can be run multiple times, a viewer and a file-writer are attached to it
     Parameters of Camera must be defined before calling Scan
     """
@@ -381,6 +381,7 @@ class ACQsetup(object):
         """A generator which yields projections. """
         LOG.info("start async scan")
         read_scan = False
+        start = self.motor.position
         velocity = self.motor.calc_vel(
             self.nsteps, self.exp_time + self.dead_time, self.range)
         try:
@@ -389,12 +390,12 @@ class ACQsetup(object):
             self.ffcsetup.open_shutter()
             self.camera.trigger_source = self.camera.trigger_sources.AUTO
             LOG.debug("Velocity: {}, Range: {}".format(
-                self.motor.stepvelocity, self.motor.LENGTH))
+                velocity, self.motor.LENGTH))
         except Exception as exp:
             LOG.error(exp)
             error_message("Problem in setup of async scan")
         try:
-            self.motor["velocity"].set(velocity).result()
+            self.motor["velocity"].set(velocity).join()
             LOG.debug("constant velocity: {}".format(self.motor._is_velocity_stable()))
             if read_scan:
                 with self.camera.recording():
@@ -405,7 +406,12 @@ class ACQsetup(object):
                 with self.camera.recording():
                     time.sleep((self.nsteps * (self.exp_time + self.dead_time) * 1e-3) * 1.05)
                 self.ffcsetup.close_shutter()
-                self.motor["velocity"].set(0.0 * q.deg / q.sec).result()
+                for i in range(10):  # doesn't always stop so try until successful
+                    LOG.debug("Stopping attempt {}.".format(i))
+                    self.motor["velocity"].set(0 * q.deg / q.sec).join()
+                    time.sleep(1)
+                    if self.motor.state != 'moving':
+                        break
                 self.camera.uca.start_readout()
                 for i in range(self.nsteps):
                     yield self.camera.grab()
@@ -413,17 +419,74 @@ class ACQsetup(object):
         except Exception as exp:
             LOG.error(exp)
             error_message("Problem in run of async scan")
-        # try:
-        #     self.ffcsetup.close_shutter()
-        #     self.motor["velocity"].set(0.0 * q.deg / q.sec).result()
-        # except Exception as exp:
-        #     LOG.debug(exp)
-        #     error_message("Problem in run of async scan")
+        try:
+            LOG.debug("change velocity")
+            self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
+            LOG.debug("return to start")
+            time.sleep(1)
+            # the motor does not always move but moving a small amount first seems
+            # to result in the movement to the start position
+            self.motor['position'].set(self.motor.position + 0.1).join()
+            time.sleep(0.2)
+            self.motor['position'].set(start).join()
+        except Exception as exp:
+            LOG.error(exp)
+            error_message("Something is wrong in final for async scan")
 
     def tomo_on_the_fly_seq_readout_Dimax(self):
         """A generator which yields projections. """
-        LOG.info("start async scan")
+        LOG.info("start on_the_fly_seq_readout_Dimax scan")
         read_scan = False
+        start = self.motor.position
+        if self.camera.state == 'recording':
+            self.camera.stop_recording()
+        if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
+            self.camera.trigger_source = self.camera.trigger_sources.AUTO
+        try:
+            self.ffcsetup.open_shutter()
+        except Exception as exp:
+            LOG.error(exp)
+            error_message("Cannot open shutter")
+        velocity = self.range * q.deg / (self.nsteps / self.camera.frame_rate)
+        sleep_time = self.nsteps / float(self.camera.frame_rate.magnitude) * 1.05
+        LOG.debug("time to sleep for scan: {}".format(sleep_time))
+        LOG.debug("Velocity: {}, Range: {}".format(
+            velocity, self.range))
+        self.motor["velocity"].set(velocity).join()
+        # parallel read-out not possible: Dimax mode SEQUENCE:
+        with self.camera.recording():
+            time.sleep(self.nsteps / float(self.camera.frame_rate.magnitude) * 1.05)
+        self.ffcsetup.close_shutter()
+        for i in range(10):  # doesn't allays stop so try until successful
+            LOG.debug("Stopping attempt {}.".format(i))
+            self.motor["velocity"].set(0 * q.deg / q.sec).join()
+            time.sleep(1)
+            if self.motor.state != 'moving':
+                break
+        self.camera.uca.start_readout()
+        for i in range(self.nsteps):
+            yield self.camera.grab()
+        self.camera.uca.stop_readout()
+        try:
+            LOG.debug("change velocity")
+            self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
+            LOG.debug("return to start")
+            time.sleep(1)
+            # the motor does not always move but moving a small amount first seems
+            # to result in the movement to the start position
+            self.motor['position'].set(self.motor.position + 0.1).join()
+            time.sleep(0.2)
+            self.motor['position'].set(start).join()
+        except Exception as exp:
+            LOG.error(exp)
+            error_message("Something is wrong in final for on_the_fly_seq_readout_Dimax scan")
+
+    def tomo_on_the_fly_par_readout_Dimax(self):
+        # parallel read out possible: Dimax mode: RECORDER + RING BUFFER:
+        """A generator which yields projections. """
+        LOG.info("start on_the_fly_par_readout_Dimax scan")
+        read_scan = False
+        start = self.motor.position
         if self.camera.state == 'recording':
             self.camera.stop_recording()
         if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
@@ -435,44 +498,28 @@ class ACQsetup(object):
             error_message("Cannot open shutter")
         velocity = self.range * q.deg / (self.nsteps / self.camera.frame_rate)
         LOG.debug("Velocity: {}, Range: {}".format(
-            self.motor.stepvelocity, self.motor.LENGTH))
-
-        self.motor["velocity"].set(velocity).result()
-        # parallel read-out not possible: Dimax mode SEQUENCE:
-        with self.camera.recording():
-            time.sleep(self.nsteps / float(self.camera.frame_rate.magnitude) * 1.05)
-        self.ffcsetup.close_shutter()
-        self.motor["velocity"].set(0.0 * q.deg / q.sec).result()
-        self.camera.uca.start_readout()
-        for i in range(self.nsteps):
-            yield self.camera.grab()
-        self.camera.uca.stop_readout()
-
-    def tomo_on_the_fly_par_readout_Dimax(self):
-        # parallel read out possible: Dimax mode: RECORDER + RING BUFFER:
-        """A generator which yields projections. """
-        LOG.info("start async scan")
-        read_scan = False
-        if self.camera.state == 'recording':
-            self.camera.stop_recording()
-        if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
-            self.camera.trigger_source = self.camera.trigger_sources.AUTO
-        try:
-            self.ffcsetup.open_shutter()
-        except Exception as exp:
-            LOG.error(exp)
-            error_message("Cannot open shutter")
-        velocity = 180 * q.deg / (self.nsteps / self.camera.frame_rate)
-        LOG.debug("Velocity: {}, Range: {}".format(
-            self.motor.stepvelocity, self.motor.LENGTH))
-        self.motor["velocity"].set(velocity).result()
+            velocity, self.range))
+        self.motor["velocity"].set(velocity).join()
         # parallel read out possible: Dimax mode: RECORDER + RING BUFFER:
         self.camera.start_recording()
         self.timer.singleShot((self.nsteps / self.camera.frame_rate) * 1050, self.stop_rotation_and_close_shutter)
+        try:
+            LOG.debug("change velocity")
+            self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
+            LOG.debug("return to start")
+            time.sleep(1)
+            # the motor does not always move but moving a small amount first seems
+            # to result in the movement to the start position
+            self.motor['position'].set(self.motor.position + 0.1).join()
+            time.sleep(0.2)
+            self.motor['position'].set(start).join()
+        except Exception as exp:
+            LOG.error(exp)
+            error_message("Something is wrong in final for on_the_fly_par_readout_Dimax scan")
 
     def stop_rotation_and_close_shutter(self):
         self.ffcsetup.close_shutter()
-        self.motor["velocity"].set(0.0 * q.deg / q.sec).result()
+        self.motor["velocity"].set(0 * q.deg / q.sec).result()
         self.timer.singleShot(60e3, self.stop_camera)
 
     def stop_camera(self):
@@ -570,7 +617,7 @@ class ACQsetup(object):
             if self.num_flats > 0:
                 self.ffcsetup.prepare_flats(True)
                 self.ffcsetup.open_shutter(True)
-                self.motor.PSO_ttl(self.num_flats, total_time).result()
+                self.motor.PSO_ttl(self.num_flats, total_time).join()
                 time.sleep((total_time / 1000.0) * self.num_flats * 1.1)
                 self.ffcsetup.close_shutter(True)
                 self.ffcsetup.prepare_radios(True)
