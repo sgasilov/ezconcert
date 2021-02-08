@@ -72,8 +72,11 @@ class ConcertScanThread(QThread):
                           buf, bufnum,
                           exp_time, fps,
                           x0, width, y0, height):
-        if self.camera.acquire_mode != self.camera.uca.enum_values.acquire_mode.AUTO:
-            self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
+        try:
+            if self.camera.acquire_mode != self.camera.uca.enum_values.acquire_mode.AUTO:
+                self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
+        except:
+            error_message("Can not set acquire mode")
         try:
             self.camera.exposure_time = exp_time * q.msec
             self.camera.frame_rate = fps * q.hertz
@@ -85,7 +88,7 @@ class ConcertScanThread(QThread):
             self.camera.roi_height = height * q.pixels
         except:
             error_message("Can not set camera parameters")
-            self.abort_scan()
+            #self.abort_scan()
 
 
 
@@ -173,6 +176,10 @@ class ACQsetup(object):
         self.top_up_veto_enabled = False
         self.top_up_veto_state = False
         self.message_entry = None
+
+        # TWO VAriable to be read directly from GUI entries when camera is not connected
+        self.ttl_exp_time = None
+        self.ttl_dead_time = None
 
         self.timer = QTimer()
 
@@ -495,11 +502,11 @@ class ACQsetup(object):
         # set param
         step_scan = False
         goto_start = True
-        if (self.exp_time + self.dead_time) < 10.0:
+        if (self.ttl_exp_time + self.ttl_self.dead_time) < 10.0:
             error_message("Time is too short for TTL pulses: {} < 10 ms")
             return
         # go to start
-        ttime = (self.exp_time + self.dead_time) / 1000.0
+        ttime = (self.ttl_self.exp_time + self.ttl_self.dead_time) / 1000.0
         if goto_start:
             try:
                 self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
@@ -516,7 +523,7 @@ class ACQsetup(object):
             if self.num_flats > 0:
                 self.ffcsetup.prepare_flats(True)
                 self.ffcsetup.open_shutter(True)
-                self.motor.PSO_ttl(self.num_flats, self.exp_time + self.dead_time).join()
+                self.motor.PSO_ttl(self.num_flats, self.ttl_exp_time + self.ttl_dead_time).join()
                 time.sleep(ttime*self.num_flats*1.1)
                 self.ffcsetup.close_shutter(True)
                 self.ffcsetup.prepare_radios(True)
@@ -526,7 +533,7 @@ class ACQsetup(object):
         LOG.debug("Take darks.")
         try:
             if self.num_darks > 0:
-                self.motor.PSO_ttl(self.num_darks, self.exp_time + self.dead_time).join()
+                self.motor.PSO_ttl(self.num_darks, self.ttl_exp_time + self.ttl_dead_time).join()
                 time.sleep(ttime * self.num_darks * 1.1)
         except Exception as exp:
             LOG.error("Problem with Dark: {}".format(exp))
@@ -539,10 +546,10 @@ class ACQsetup(object):
                 self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).result()
                 for pos in region:
                     self.motor.position = pos
-                    self.motor.PSO_ttl(1, self.exp_time + self.dead_time)
+                    self.motor.PSO_ttl(1, self.ttl_exp_time + self.ttl_dead_time)
             else:
                 vel = self.motor.calc_vel(
-                    self.nsteps, self.exp_time + self.dead_time, self.range)
+                    self.nsteps, self.ttl_exp_time + self.ttl_dead_time, self.range)
                 if vel > 365 * q.deg / q.sec:
                     error_message("Velocity is too high: {} > 365 deg/s".format(vel))
                     return
@@ -552,7 +559,7 @@ class ACQsetup(object):
                 LOG.debug("Velocity: {}, Step: {}, Range: {}".format(
                     self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
                 self.motor.PSO_multi(False).join()
-                time.sleep(self.nsteps * ((self.exp_time + self.dead_time) / 1000.0) * 1.05)
+                time.sleep(self.nsteps * ((self.ttl_exp_time + self.ttl_dead_time) / 1000.0) * 1.05)
             self.ffcsetup.close_shutter()
         except Exception as exp:
             LOG.error("Problem with Tomo: {}".format(exp))
@@ -573,7 +580,7 @@ class ACQsetup(object):
             if self.num_flats > 0:
                 self.ffcsetup.prepare_flats(True)
                 self.ffcsetup.open_shutter(True)
-                self.motor.PSO_ttl(self.num_flats, self.exp_time + self.dead_time).result()
+                self.motor.PSO_ttl(self.num_flats, self.ttl_exp_time + self.ttl_dead_time).result()
                 time.sleep(ttime * self.num_flats * 1.1)
                 self.ffcsetup.close_shutter(True)
                 self.ffcsetup.prepare_radios(True)

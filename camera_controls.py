@@ -520,8 +520,18 @@ class CameraControlsGroup(QGroupBox):
         return x
 
     def relate_fps_to_exptime(self):
-        x = 1000.0 / self.exp_time
+        if self.trig_mode == "EXTERNAL":
+            x = 1000.0 / (self.exp_time + self.dead_time)
+        else:
+            x = 1000.0 / self.exp_time
         self.fps_entry.setText("{:.02f}".format(x))
+
+    # def relate_fps_to_deadtime(self):
+    #     if self.trigger_entry.text() == "EXTERNAL":
+    #         x = 1000.0 / (self.exp_time + self.dead_time)
+    #     else:
+    #         x = 1000.0 / self.exp_time
+    #     self.fps_entry.setText("{:.02f}".format(x))
 
     @property
     def fps(self):
@@ -550,7 +560,8 @@ class CameraControlsGroup(QGroupBox):
         try:
             return float(self.delay_entry.text())
         except ValueError:
-            return None
+            warning_message("{:}".format(
+                "Dead time must be a non-negative number"))
 
     @property
     def roi_height(self):

@@ -148,10 +148,15 @@ class GUI(QDialog):
         self.scan_controls_group.inner_loop_steps_entry.editingFinished.connect(
             self.relate_nbuf_to_nproj)
         # populate motors dictionary when physical device is connected
-        self.motor_control_group.connect_hor_mot_button.clicked.connect(self.add_mot_hor)
-        self.motor_control_group.connect_vert_mot_button.clicked.connect(self.add_mot_vert)
-        self.motor_control_group.connect_CT_mot_button.clicked.connect(self.add_mot_CT)
-        self.motor_control_group.connect_shutter_button.clicked.connect(self.add_mot_sh)
+        # self.motor_control_group.connect_hor_mot_button.clicked.connect(self.add_mot_hor)
+        # self.motor_control_group.connect_vert_mot_button.clicked.connect(self.add_mot_vert)
+        # self.motor_control_group.connect_CT_mot_button.clicked.connect(self.add_mot_CT)
+        # self.motor_control_group.connect_shutter_button.clicked.connect(self.add_mot_sh)
+        # add motors automatically on start
+        self.motor_control_group.connect_hor_motor_func()
+        self.motor_control_group.connect_CT_motor_func()
+        self.motor_control_group.connect_vert_motor_func()
+        self.motor_control_group.connect_shutter_func()
 
         # finally
         self.set_layout()
@@ -313,14 +318,19 @@ class GUI(QDialog):
         # since reference to libuca object was getting lost and camera is passed
         # though a signal, its parameters are changed by means of a function rather
         # then directly setting them from GUI
-        self.concert_scan.set_camera_params(self.camera_controls_group.buffered,
-                                            self.camera_controls_group.buffnum,
-                                            self.camera_controls_group.exp_time,
-                                            self.camera_controls_group.fps,
-                                            self.camera_controls_group.roi_x0,
-                                            self.camera_controls_group.roi_width,
-                                            self.camera_controls_group.roi_y0,
-                                            self.camera_controls_group.roi_height)
+        if not self.camera_controls_group.ttl_scan.isChecked():
+            self.concert_scan.set_camera_params(self.camera_controls_group.buffered,
+                                                self.camera_controls_group.buffnum,
+                                                self.camera_controls_group.exp_time,
+                                                self.camera_controls_group.fps,
+                                                self.camera_controls_group.roi_x0,
+                                                self.camera_controls_group.roi_width,
+                                                self.camera_controls_group.roi_y0,
+                                                self.camera_controls_group.roi_height)
+        else:
+            self.concert_scan.acq_setup.ttl_exp_time = self.camera_controls_group.exp_time
+            self.concert_scan.acq_setup.ttl_dead_time = self.camera_controls_group.dead_time
+
 
         # SET ACQUISION PARAMETERS
         # Times as floating point numbers [msec] to compute the CT stage motion
