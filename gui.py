@@ -33,6 +33,7 @@ import concert
 # Miscellaneous imports
 from numpy import linspace
 import time
+import argparse
 # Dark style
 # noinspection PyUnresolvedReferences
 from styles.breeze import styles_breeze
@@ -51,6 +52,11 @@ fh.setFormatter(formatter)
 # LOG.addHandler(ch)
 LOG.addHandler(fh)
 
+def process_cl_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-d', '--debug', action='store_const', const=True)  # optional flags
+    parsed_args, unparsed_args = parser.parse_known_args()
+    return parsed_args, unparsed_args
 
 
 class GUI(QDialog):
@@ -148,15 +154,15 @@ class GUI(QDialog):
         self.scan_controls_group.inner_loop_steps_entry.editingFinished.connect(
             self.relate_nbuf_to_nproj)
         # populate motors dictionary when physical device is connected
-        # self.motor_control_group.connect_hor_mot_button.clicked.connect(self.add_mot_hor)
-        # self.motor_control_group.connect_vert_mot_button.clicked.connect(self.add_mot_vert)
-        # self.motor_control_group.connect_CT_mot_button.clicked.connect(self.add_mot_CT)
-        # self.motor_control_group.connect_shutter_button.clicked.connect(self.add_mot_sh)
+        self.motor_control_group.connect_hor_mot_button.clicked.connect(self.add_mot_hor)
+        self.motor_control_group.connect_vert_mot_button.clicked.connect(self.add_mot_vert)
+        self.motor_control_group.connect_CT_mot_button.clicked.connect(self.add_mot_CT)
+        self.motor_control_group.connect_shutter_button.clicked.connect(self.add_mot_sh)
         # add motors automatically on start
-        self.motor_control_group.connect_hor_motor_func()
-        self.motor_control_group.connect_CT_motor_func()
-        self.motor_control_group.connect_vert_motor_func()
-        self.motor_control_group.connect_shutter_func()
+        # self.motor_control_group.connect_hor_motor_func()
+        # self.motor_control_group.connect_CT_motor_func()
+        # self.motor_control_group.connect_vert_motor_func()
+        # self.motor_control_group.connect_shutter_func()
 
         # finally
         self.set_layout()
@@ -327,12 +333,7 @@ class GUI(QDialog):
                                                 self.camera_controls_group.roi_width,
                                                 self.camera_controls_group.roi_y0,
                                                 self.camera_controls_group.roi_height)
-        else:
-            self.concert_scan.acq_setup.ttl_exp_time = self.camera_controls_group.exp_time
-            self.concert_scan.acq_setup.ttl_dead_time = self.camera_controls_group.dead_time
-
-
-        # SET ACQUISION PARAMETERS
+        # SET ACQUISITION PARAMETERS
         # Times as floating point numbers [msec] to compute the CT stage motion
         self.concert_scan.acq_setup.dead_time = self.camera_controls_group.dead_time
         self.concert_scan.acq_setup.exp_time = self.camera_controls_group.exp_time
@@ -358,7 +359,6 @@ class GUI(QDialog):
             self.concert_scan.ffc_setup.flat_position = self.ffc_controls_group.flat_position * q.mm
             self.concert_scan.acq_setup.num_flats = self.ffc_controls_group.num_flats
             self.concert_scan.acq_setup.num_darks = self.ffc_controls_group.num_darks
-
         # POPULATE THE LIST OF ACQUISITIONS
         acquisitions = []
         # ffc before
@@ -407,12 +407,10 @@ class GUI(QDialog):
             self.concert_scan.cons_viewer.detach()
         except:
             pass
-
         # CREATE NEW INSTANCE OF CONCERT EXPERIMENT
         self.concert_scan.create_experiment(acquisitions,
                                             self.file_writer_group.ctsetname,
                                             self.file_writer_group.separate_scans)
-
         # FINALLY ATTACH CONSUMERS
         if self.file_writer_group.isChecked():
             self.concert_scan.attach_writer()
@@ -465,7 +463,12 @@ class GUI(QDialog):
 
 
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
+    parsed_args, unparsed_args = process_cl_args()
+    if parsed_args.debug:
+        LOG.addHandler(ch)
+    # QApplication expects the first argument to be the program name.
+    qt_args = sys.argv[:1] + unparsed_args
+    app = QApplication(qt_args)
     loop = QEventLoop(app)
     root_dir = os.path.dirname(os.path.abspath(__file__))
     style_file = QFile(os.path.join(root_dir, "styles/breeze/dark.qss"))

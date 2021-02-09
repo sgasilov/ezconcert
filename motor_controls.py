@@ -30,7 +30,7 @@ class MotorsControlsGroup(QGroupBox):
         self.connect_vert_mot_button = QPushButton("vertical stage")
         self.connect_CT_mot_button = QPushButton("CT stage")
         self.connect_shutter_button = QPushButton("Imaging shutter")
-        # this are to be implemeted depending on low-level interface (EPICS/Tango/etc)
+        # this are to be implemented depending on low-level interface (EPICS/Tango/etc)
         self.connect_hor_mot_button.clicked.connect(self.connect_hor_motor_func)
         self.connect_vert_mot_button.clicked.connect(self.connect_vert_motor_func)
         self.connect_CT_mot_button.clicked.connect(self.connect_CT_motor_func)
