@@ -154,6 +154,8 @@ class ACQsetup(object):
         self.x = None
         self.ffc_motor = None
         self.outer_motor = None
+        self.flats_before = False
+        self.flats_after = False
         # acquisitions
         # flats/darks (always softr with immidiate transfer)
         self.flats_softr = Acquisition('flats', self.take_flats_softr)
@@ -565,7 +567,7 @@ class ACQsetup(object):
         # flats before
         LOG.debug("Take flats before.")
         try:
-            if self.num_flats > 0:
+            if self.flats_before:
                 self.ffcsetup.prepare_flats(True)
                 self.ffcsetup.open_shutter(True)
                 self.motor.PSO_ttl(self.num_flats, total_time).join()
@@ -577,7 +579,7 @@ class ACQsetup(object):
         # darks
         LOG.debug("Take darks.")
         try:
-            if self.num_darks > 0:
+            if self.flats_before:
                 time.sleep(2.0)
                 self.motor.PSO_ttl(self.num_darks, total_time).join()
                 time.sleep((total_time/1000.0) * self.num_darks * 1.1)
@@ -614,7 +616,7 @@ class ACQsetup(object):
         # flats after
         LOG.debug("Take flats after.")
         try:
-            if self.num_flats > 0:
+            if self.flats_after:
                 self.ffcsetup.prepare_flats(True)
                 self.ffcsetup.open_shutter(True)
                 self.motor.PSO_ttl(self.num_flats, total_time).join()

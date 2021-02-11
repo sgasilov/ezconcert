@@ -347,6 +347,8 @@ class GUI(QDialog):
         self.concert_scan.acq_setup.range = self.scan_controls_group.inner_range
         self.concert_scan.acq_setup.endp = self.scan_controls_group.inner_endpoint
         self.concert_scan.acq_setup.calc_step()
+        self.concert_scan.acq_setup.flats_before = self.scan_controls_group.ffc_before
+        self.concert_scan.acq_setup.flats_after = self.scan_controls_group.ffc_after
         # SET shutter
         self.concert_scan.ffc_setup.shutter = self.shutter
         # SET FFC parameters
