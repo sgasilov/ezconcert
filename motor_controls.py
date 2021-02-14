@@ -1,5 +1,5 @@
 import atexit
-from PyQt5.QtCore import pyqtSignal, QObject, QThread
+from PyQt5.QtCore import pyqtSignal, QObject, QThread, Qt
 from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, \
     QPushButton, QDoubleSpinBox, QFrame, \
     QSizePolicy
@@ -8,6 +8,7 @@ from message_dialog import info_message, error_message
 # Adam's Concert-EPICS interface
 from edc.shutter import CLSShutter
 from edc.motor import CLSLinear, ABRS, SimMotor
+from switch import Switch
 
 from concert.devices.base import abort as device_abort
 from concert.quantities import q
@@ -100,7 +101,7 @@ class MotorsControlsGroup(QGroupBox):
         self.vert_mot_rel_move.setRange(-100, 100)
         self.CT_mot_rel_move = QDoubleSpinBox()
         self.CT_mot_rel_move.setDecimals(3)
-        # self.CT_mot_rel_move.setRange(-720, 720)
+        self.CT_mot_rel_move.setRange(-720, 720)
 
         # Move Buttons
         self.stop_motors_button = QPushButton("STOP ALL")
@@ -143,6 +144,17 @@ class MotorsControlsGroup(QGroupBox):
         self.line_vertical2 = QVSeparationLine()
         self.line_vertical3 = QVSeparationLine()
         self.line_vertical4 = QVSeparationLine()
+
+        # switch
+        self.CT_vel_select = Switch()
+        self.CT_vel_select.clicked.connect(self.CT_vel_func)
+        self.CT_vel_select.setEnabled(False)
+        self.CT_vel_low_label = QLabel()
+        self.CT_vel_low_label.setText("5 deg/s")
+        self.CT_vel_low_label.setAlignment(Qt.AlignCenter)
+        self.CT_vel_high_label = QLabel()
+        self.CT_vel_high_label.setText("20 deg/s")
+        self.CT_vel_high_label.setAlignment(Qt.AlignCenter)
 
         # THREADS
         self.motion_hor = None
@@ -195,10 +207,14 @@ class MotorsControlsGroup(QGroupBox):
         layout.addWidget(self.vert_mot_rel_move, 2, 6)
         layout.addWidget(self.CT_mot_rel_move, 2, 2)
 
-        layout.addWidget(self.line_vertical, 0, 1, 3, 1)
-        layout.addWidget(self.line_vertical2, 0, 5, 3, 1)
-        layout.addWidget(self.line_vertical3, 0, 9, 3, 1)
-        layout.addWidget(self.line_vertical4, 0, 13, 3, 1)
+        layout.addWidget(self.line_vertical, 0, 1, 4, 1)
+        layout.addWidget(self.line_vertical2, 0, 5, 4, 1)
+        layout.addWidget(self.line_vertical3, 0, 9, 4, 1)
+        layout.addWidget(self.line_vertical4, 0, 13, 4, 1)
+
+        layout.addWidget(self.CT_vel_select, 3, 3)
+        layout.addWidget(self.CT_vel_low_label, 3, 2)
+        layout.addWidget(self.CT_vel_high_label, 3, 4)
 
         self.setLayout(layout)
 
@@ -244,6 +260,8 @@ class MotorsControlsGroup(QGroupBox):
             self.move_CT_rel_button.setEnabled(True)
             self.home_CT_mot_button.setEnabled(True)
             self.reset_CT_mot_button.setEnabled(True)
+            self.CT_vel_select.setEnabled(True)
+            self.CT_motor.base_vel = 5 * q.deg / q.sec
             self.CT_mot_monitor = EpicsMonitorFloat(self.CT_motor.RBV)
             self.CT_mot_monitor.i0_state_changed_signal.connect(
                 self.CT_mot_pos_label.setText)
@@ -307,7 +325,8 @@ class MotorsControlsGroup(QGroupBox):
         if self.CT_motor is None:
             return
         else:
-            self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
+            # self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
+            self.CT_motor.stepvelocity = self.CT_motor.base_vel
             self.motion_CT = MotionThread(self.CT_motor, self.CT_mot_pos_move)
             self.motion_CT.start()
 
@@ -316,7 +335,8 @@ class MotorsControlsGroup(QGroupBox):
         if self.CT_motor is None:
             return
         else:
-            self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
+            # self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
+            self.CT_motor.stepvelocity = self.CT_motor.base_vel
             self.motion_CT = MotionThread(
                 self.CT_motor, self.CT_mot_pos_move, self.CT_mot_rel_move)
             self.motion_CT.start()
@@ -330,6 +350,16 @@ class MotorsControlsGroup(QGroupBox):
             self.CT_mot_pos_move.setValue(0.0)
             self.CT_move_func()
             info_message("Reset finished. Please wait for state motion to stop.")
+
+    def CT_vel_func(self):
+        """Select base velocity"""
+        if self.CT_motor is None:
+            return
+        else:
+            if self.CT_vel_select.isChecked():
+                self.CT_motor.base_vel = 20 * q.deg/q.sec
+            else:
+                self.CT_motor.base_vel = 5 * q.deg/q.sec
 
     def hor_move_func(self):
         if self.hor_motor is None:
@@ -433,12 +463,13 @@ class MotionThread(QThread):
 
     def run(self):  # .start() calls this function
         while self.thread_running:
+            final_pos = self.motor.position
             try:
                 if self.rel_position is None:
-                    rel_pos_value = 0.0
+                    final_pos = self.position.value() * self.motor.UNITS
                 else:
-                    rel_pos_value = self.rel_position.value()
-                self.motor.position = rel_pos_value + self.position.value() * self.motor.UNITS
+                    final_pos += self.rel_position.value() * self.motor.UNITS
+                self.motor.position = final_pos
                 self.thread_running = False
             except TransitionNotAllowed:
                 error_message("Stage is moving. Wait until motion has stopped.")
