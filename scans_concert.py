@@ -603,8 +603,8 @@ class ACQsetup(object):
                     error_message(mesg)
                     LOG.error(mesg)
                     return
-                self.motor['stepvelocity'].set(vel).result()
-                self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).result()
+                self.motor['stepvelocity'].set(vel).join()
+                self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).join()
                 self.motor.LENGTH = self.range * q.deg
                 LOG.debug("Velocity: {}, Step: {}, Range: {}".format(
                     self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
