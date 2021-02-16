@@ -369,7 +369,11 @@ class MotorsControlsGroup(QGroupBox):
             self.motion_hor.start()
 
     def hor_move_rel_func(self):
-        pass
+        if self.hor_motor is None:
+            return
+        else:
+            self.motion_hor = MotionThread(self.hor_motor, self.hor_mot_pos_move, self.hor_mot_rel_move)
+            self.motion_hor.start()
 
     def vert_move_func(self):
         if self.vert_motor is None:
@@ -379,7 +383,11 @@ class MotorsControlsGroup(QGroupBox):
             self.motion_vert.start()
 
     def vert_move_rel_func(self):
-        pass
+        if self.vert_motor is None:
+            return
+        else:
+            self.motion_vert = MotionThread(self.vert_motor, self.vert_mot_pos_move, self.vert_mot_rel_move)
+            self.motion_vert.start()
 
     def stop_motors_func(self):
         # pyqt threads
