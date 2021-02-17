@@ -316,6 +316,7 @@ class CameraControlsGroup(QGroupBox):
         self.live_on_button.setEnabled(True)
         self.live_off_button.setEnabled(True)
         self.save_one_image_button.setEnabled(True)
+        self.camera.acquire_mode = None
 
     def on_camera_connect_success(self):
         """

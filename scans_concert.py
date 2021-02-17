@@ -73,7 +73,7 @@ class ConcertScanThread(QThread):
                           exp_time, fps,
                           x0, width, y0, height):
         try:
-            if self.camera.acquire_mode != self.camera.uca.enum_values.acquire_mode.AUTO:
+            if (self.camera.acquire_mode is not None) and (self.camera.acquire_mode != self.camera.uca.enum_values.acquire_mode.AUTO):
                 self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
         except:
             error_message("Can not set acquire mode")
@@ -343,7 +343,7 @@ class ACQsetup(object):
             LOG.debug("change velocity")
             self.motor['stepvelocity'].set(self.motor.base_vel).join()
             LOG.debug("return to start")
-            time.sleep(1)
+            time.sleep(2)
             self.motor['position'].set(start).join()
         except Exception as exp:
             LOG.error(exp)
