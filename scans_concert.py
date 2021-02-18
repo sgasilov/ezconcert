@@ -73,7 +73,7 @@ class ConcertScanThread(QThread):
                           exp_time, fps,
                           x0, width, y0, height):
         try:
-            if self.camera.acquire_mode != self.camera.uca.enum_values.acquire_mode.AUTO:
+            if (self.camera.acquire_mode is not None) and (self.camera.acquire_mode != self.camera.uca.enum_values.acquire_mode.AUTO):
                 self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
         except:
             error_message("Can not set acquire mode")
@@ -257,7 +257,7 @@ class ACQsetup(object):
         try:
             if self.motor.name.startswith('ABRS'):
                 if (self.nsteps == 2):
-                    self.motor['stepvelocity'].set(50.0 * q.deg / q.sec).join()
+                    self.motor['stepvelocity'].set(20.0 * q.deg / q.sec).join()
                 else:
                     self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
             self.ffcsetup.open_shutter()
@@ -341,9 +341,9 @@ class ACQsetup(object):
             self.camera.stop_recording()
             self.ffcsetup.close_shutter()
             LOG.debug("change velocity")
-            self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
+            self.motor['stepvelocity'].set(self.motor.base_vel).join()
             LOG.debug("return to start")
-            time.sleep(1)
+            time.sleep(2)
             self.motor['position'].set(start).join()
         except Exception as exp:
             LOG.error(exp)
@@ -423,7 +423,7 @@ class ACQsetup(object):
             error_message("Problem in run of async scan")
         try:
             LOG.debug("change velocity")
-            self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
+            self.motor['stepvelocity'].set(self.motor.base_vel).join()
             LOG.debug("return to start")
             time.sleep(1)
             # the motor does not always move but moving a small amount first seems
@@ -471,7 +471,7 @@ class ACQsetup(object):
         self.camera.uca.stop_readout()
         try:
             LOG.debug("change velocity")
-            self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
+            self.motor['stepvelocity'].set(self.motor.base_vel).join()
             LOG.debug("return to start")
             time.sleep(1)
             # the motor does not always move but moving a small amount first seems
@@ -507,7 +507,7 @@ class ACQsetup(object):
         self.timer.singleShot((self.nsteps / self.camera.frame_rate) * 1050, self.stop_rotation_and_close_shutter)
         try:
             LOG.debug("change velocity")
-            self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
+            self.motor['stepvelocity'].set(self.motor.base_vel).join()
             LOG.debug("return to start")
             time.sleep(1)
             # the motor does not always move but moving a small amount first seems
@@ -603,8 +603,8 @@ class ACQsetup(object):
                     error_message(mesg)
                     LOG.error(mesg)
                     return
-                self.motor['stepvelocity'].set(vel).result()
-                self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).result()
+                self.motor['stepvelocity'].set(vel).join()
+                self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).join()
                 self.motor.LENGTH = self.range * q.deg
                 LOG.debug("Velocity: {}, Step: {}, Range: {}".format(
                     self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
