@@ -34,7 +34,7 @@ from numpy import linspace
 import time
 # Dark style
 # noinspection PyUnresolvedReferences
-from styles.breeze import styles_breeze
+from styles.breeze.styles_breeze import qInitResources
 
 concert.require("0.11.0")
 LOG = logging.getLogger("ezconcert")
@@ -448,6 +448,7 @@ class GUI(QDialog):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     loop = QEventLoop(app)
+    qInitResources()
     root_dir = os.path.dirname(os.path.abspath(__file__))
     style_file = QFile(os.path.join(root_dir, "styles/breeze/dark.qss"))
     style_file.open(QFile.ReadOnly | QFile.Text)
