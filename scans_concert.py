@@ -604,11 +604,14 @@ class ACQsetup(object):
                     LOG.error(mesg)
                     return
                 self.motor['stepvelocity'].set(vel).join()
-                self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).join()
-                self.motor.LENGTH = self.range * q.deg
+                # self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).join()
+                self.motor['stepangle'].set(self.step).join()
+                # self.motor.LENGTH = self.range * q.deg
+                self.motor.LENGTH = self.step * self.nsteps
                 LOG.debug("Velocity: {}, Step: {}, Range: {}".format(
                     self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
                 self.motor.PSO_multi(False).join()
+                LOG.debug("Expected time to wait: {} s".format(self.nsteps * (total_time / 1000.0) * 1.05))
                 time.sleep(self.nsteps * (total_time / 1000.0) * 1.05)
             self.ffcsetup.close_shutter()
         except Exception as exp:
