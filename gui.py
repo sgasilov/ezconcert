@@ -34,9 +34,8 @@ import concert
 from numpy import linspace
 import time
 import argparse
-# Dark style
-# noinspection PyUnresolvedReferences
-from styles.breeze import styles_breeze
+# Dark style resources initialization
+from styles.breeze.styles_breeze import qInitResources
 
 concert.require("0.11.0")
 LOG = logging.getLogger("ezconcert")
@@ -472,11 +471,12 @@ if __name__ == '__main__':
     qt_args = sys.argv[:1] + unparsed_args
     app = QApplication(qt_args)
     loop = QEventLoop(app)
+    qInitResources()
     root_dir = os.path.dirname(os.path.abspath(__file__))
     style_file = QFile(os.path.join(root_dir, "styles/breeze/dark.qss"))
     style_file.open(QFile.ReadOnly | QFile.Text)
     stream = QTextStream(style_file)
     # Set application style to dark; Comment following line to unset
-    # app.setStyleSheet(stream.readAll())
+    app.setStyleSheet(stream.readAll())
     ex = GUI()
     sys.exit(app.exec_())
