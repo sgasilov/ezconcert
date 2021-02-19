@@ -37,4 +37,9 @@ make install
 
 Check installation with `pip list`
 
-
+### Building styles:
+in project directory run:
+```
+cd ./styles/breeze/
+pyrcc5 breeze.qrc -o styles_breeze.py
+```
