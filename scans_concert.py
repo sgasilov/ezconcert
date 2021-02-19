@@ -577,14 +577,14 @@ class ACQsetup(object):
         except Exception as exp:
             LOG.error("Problem with Flat Before: {}".format(exp))
         # darks
-        LOG.debug("Take darks.")
+        LOG.debug("Take darks before.")
         try:
             if self.flats_before:
                 time.sleep(2.0)
                 self.motor.PSO_ttl(self.num_darks, total_time).join()
                 time.sleep((total_time/1000.0) * self.num_darks * 1.1)
         except Exception as exp:
-            LOG.error("Problem with Dark: {}".format(exp))
+            LOG.error("Problem with Dark before: {}".format(exp))
         # take projections
         LOG.debug("Take projections.")
         try:
@@ -628,6 +628,15 @@ class ACQsetup(object):
                 self.ffcsetup.prepare_radios(True)
         except Exception as exp:
             LOG.error("Problem with Flat After: {}".format(exp))
+        # darks
+        LOG.debug("Take darks after.")
+        try:
+            if self.flats_after:
+                time.sleep(2.0)
+                self.motor.PSO_ttl(self.num_darks, total_time).join()
+                time.sleep((total_time / 1000.0) * self.num_darks * 1.1)
+        except Exception as exp:
+            LOG.error("Problem with Dark After: {}".format(exp))
         # go to start
         if goto_start:
             try:
