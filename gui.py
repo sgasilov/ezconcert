@@ -152,10 +152,25 @@ class GUI(QDialog):
         self.motor_control_group.connect_CT_mot_button.clicked.connect(self.add_mot_CT)
         self.motor_control_group.connect_shutter_button.clicked.connect(self.add_mot_sh)
 
+        # Set application style to dark; Comment following line to unset
+        self.set_dark_style()
+
         # finally
         self.set_layout()
         self.show()
         LOG.info("Start gui.py")
+
+    @staticmethod
+    def set_dark_style():
+        application = QApplication.instance()
+        if application is None:
+            raise RuntimeError("No Qt Application found.")
+        qInitResources()
+        root_dir = os.path.dirname(os.path.abspath(__file__))
+        style_file = QFile(os.path.join(root_dir, "styles/breeze/dark.qss"))
+        style_file.open(QFile.ReadOnly | QFile.Text)
+        stream = QTextStream(style_file)
+        application.setStyleSheet(stream.readAll())
 
     def set_layout(self):
         main_layout = QGridLayout()
@@ -448,12 +463,5 @@ class GUI(QDialog):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     loop = QEventLoop(app)
-    qInitResources()
-    root_dir = os.path.dirname(os.path.abspath(__file__))
-    style_file = QFile(os.path.join(root_dir, "styles/breeze/dark.qss"))
-    style_file.open(QFile.ReadOnly | QFile.Text)
-    stream = QTextStream(style_file)
-    # Set application style to dark; Comment following line to unset
-    app.setStyleSheet(stream.readAll())
     ex = GUI()
     sys.exit(app.exec_())
