@@ -577,14 +577,14 @@ class ACQsetup(object):
         except Exception as exp:
             LOG.error("Problem with Flat Before: {}".format(exp))
         # darks
-        LOG.debug("Take darks.")
+        LOG.debug("Take darks before.")
         try:
             if self.flats_before:
                 time.sleep(2.0)
                 self.motor.PSO_ttl(self.num_darks, total_time).join()
                 time.sleep((total_time/1000.0) * self.num_darks * 1.1)
         except Exception as exp:
-            LOG.error("Problem with Dark: {}".format(exp))
+            LOG.error("Problem with Dark before: {}".format(exp))
         # take projections
         LOG.debug("Take projections.")
         try:
@@ -604,11 +604,14 @@ class ACQsetup(object):
                     LOG.error(mesg)
                     return
                 self.motor['stepvelocity'].set(vel).join()
-                self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).join()
-                self.motor.LENGTH = self.range * q.deg
+                # self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).join()
+                self.motor['stepangle'].set(self.step).join()
+                # self.motor.LENGTH = self.range * q.deg
+                self.motor.LENGTH = self.step * self.nsteps
                 LOG.debug("Velocity: {}, Step: {}, Range: {}".format(
                     self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
                 self.motor.PSO_multi(False).join()
+                LOG.debug("Expected time to wait: {} s".format(self.nsteps * (total_time / 1000.0) * 1.05))
                 time.sleep(self.nsteps * (total_time / 1000.0) * 1.05)
             self.ffcsetup.close_shutter()
         except Exception as exp:
@@ -625,6 +628,15 @@ class ACQsetup(object):
                 self.ffcsetup.prepare_radios(True)
         except Exception as exp:
             LOG.error("Problem with Flat After: {}".format(exp))
+        # darks
+        LOG.debug("Take darks after.")
+        try:
+            if self.flats_after:
+                time.sleep(2.0)
+                self.motor.PSO_ttl(self.num_darks, total_time).join()
+                time.sleep((total_time / 1000.0) * self.num_darks * 1.1)
+        except Exception as exp:
+            LOG.error("Problem with Dark After: {}".format(exp))
         # go to start
         if goto_start:
             try:
