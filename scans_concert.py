@@ -6,7 +6,6 @@ import numpy as np
 import atexit
 from time import sleep
 
-from concert.async import busy_wait
 from concert.quantities import q
 from concert.experiments.base import Acquisition, Experiment
 from concert.experiments.imaging import (
@@ -541,9 +540,6 @@ class ACQsetup(object):
     # Camera is completely external and this is only moving stages and sending triggers
     def take_ttl_tomo(self):
         """Scan using triggers to camera. The camera is assumed to be controlled externally"""
-        def move_done():
-            return self.moter.state == 'standby'
-
         LOG.info("start TTL scan")
         # set param
         step_scan = False
@@ -600,7 +596,7 @@ class ACQsetup(object):
             else:
                 vel = self.motor.calc_vel(
                     self.nsteps, total_time, self.range)
-                if vel > 365 * q.deg / q.sec:
+                if vel.magnitude > 365.0:
                     mesg = "Velocity is too high: {} > 365 deg/s".format(vel)
                     error_message(mesg)
                     LOG.error(mesg)
@@ -614,8 +610,8 @@ class ACQsetup(object):
                 LOG.debug("Velocity: {}, Step: {}, Range: {}".format(
                     self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
                 self.motor.PSO_multi(False)
-                LOG.debug("Expected time to wait: {} s".format(self.nsteps * (total_time / 1000.0) * 1.05))
-                busy_wait(move_done, sleep_time=0.1, timeout=None)
+                # LOG.debug("Expected time to wait: {} s".format(self.nsteps * (total_time / 1000.0) * 1.05))
+                self.motor.wait_until_stop(timeout=1.0*q.sec)
             self.ffcsetup.close_shutter(True)
         except Exception as exp:
             LOG.error("Problem with Tomo: {}".format(exp))
