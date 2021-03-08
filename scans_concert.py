@@ -6,8 +6,7 @@ import numpy as np
 import atexit
 from time import sleep
 
-from concert.async import async, wait
-from concert.base import identity
+from concert.async import busy_wait
 from concert.quantities import q
 from concert.experiments.base import Acquisition, Experiment
 from concert.experiments.imaging import (
@@ -542,6 +541,9 @@ class ACQsetup(object):
     # Camera is completely external and this is only moving stages and sending triggers
     def take_ttl_tomo(self):
         """Scan using triggers to camera. The camera is assumed to be controlled externally"""
+        def move_done():
+            return self.moter.state == 'standby'
+
         LOG.info("start TTL scan")
         # set param
         step_scan = False
@@ -588,7 +590,7 @@ class ACQsetup(object):
         # take projections
         LOG.debug("Take projections.")
         try:
-            self.ffcsetup.open_shutter().join()
+            self.ffcsetup.open_shutter(True)
             region = np.linspace(self.start, self.range, self.nsteps) * q.deg
             if step_scan:
                 self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).result()
@@ -605,15 +607,16 @@ class ACQsetup(object):
                     return
                 self.motor['stepvelocity'].set(vel).join()
                 # self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).join()
+                print("set step")
                 self.motor['stepangle'].set(self.step).join()
                 # self.motor.LENGTH = self.range * q.deg
                 self.motor.LENGTH = self.step * self.nsteps
                 LOG.debug("Velocity: {}, Step: {}, Range: {}".format(
                     self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
-                self.motor.PSO_multi(False).join()
+                self.motor.PSO_multi(False)
                 LOG.debug("Expected time to wait: {} s".format(self.nsteps * (total_time / 1000.0) * 1.05))
-                time.sleep(self.nsteps * (total_time / 1000.0) * 1.05)
-            self.ffcsetup.close_shutter()
+                busy_wait(move_done, sleep_time=0.1, timeout=None)
+            self.ffcsetup.close_shutter(True)
         except Exception as exp:
             LOG.error("Problem with Tomo: {}".format(exp))
         # flats after
