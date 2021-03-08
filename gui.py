@@ -1,8 +1,7 @@
 # Adam's Concert-EPICS interface
 import os
 
-from edc.shutter import CLSShutter
-from edc.motor import CLSLinear, ABRS, SimMotor
+
 # PyQT imports
 from PyQt5.QtWidgets import QGroupBox, QDialog, QApplication, QGridLayout
 from PyQt5.QtWidgets import QLabel, QPushButton, QDoubleSpinBox
@@ -22,6 +21,7 @@ from on_the_fly_reco_settings import RecoSettingsGroup
 # Concert imports
 from concert.storage import DirectoryWalker
 from concert.ext.viewers import PyplotImageViewer
+from concert.devices.shutters.dummy import Shutter as DummyShutter
 from concert.experiments.imaging import (tomo_projections_number, tomo_max_speed, frames)
 from concert.base import TransitionNotAllowed
 # from concert.session.utils import ddoc, dstate, pdoc, code_of, abort
@@ -110,6 +110,7 @@ class GUI(QDialog):
         self.motor_inner = None
         self.motor_outer = None
         self.motor_flat = None
+        self.shutter = None
 
 
         # external subgroups to set parameters
@@ -350,7 +351,10 @@ class GUI(QDialog):
         self.concert_scan.acq_setup.flats_before = self.scan_controls_group.ffc_before
         self.concert_scan.acq_setup.flats_after = self.scan_controls_group.ffc_after
         # SET shutter
-        self.concert_scan.ffc_setup.shutter = self.shutter
+        if self.shutter is None:
+            self.concert_scan.ffc_setup.shutter = DummyShutter()
+        else:
+            self.concert_scan.ffc_setup.shutter = self.shutter
         # SET FFC parameters
         if self.scan_controls_group.ffc_before or self.scan_controls_group.ffc_after:
             try:
