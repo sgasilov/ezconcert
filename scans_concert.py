@@ -339,9 +339,13 @@ class ACQsetup(object):
             self.camera.stop_recording()
             self.ffcsetup.close_shutter()
             LOG.debug("change velocity")
+            self.motor.wait_until_stop(timeout=0.5*q.sec)
             self.motor['stepvelocity'].set(self.motor.base_vel).join()
             LOG.debug("return to start")
-            time.sleep(2)
+            # the motor does not always move but moving a small amount first seems
+            # to result in the movement to the start position
+            self.motor['position'].set(self.motor.position + 0.1).join()
+            time.sleep(0.2)
             self.motor['position'].set(start).join()
         except Exception as exp:
             LOG.error(exp)
@@ -406,12 +410,7 @@ class ACQsetup(object):
                 with self.camera.recording():
                     time.sleep((self.nsteps * (self.exp_time + self.dead_time) * 1e-3) * 1.05)
                 self.ffcsetup.close_shutter()
-                for i in range(10):  # doesn't always stop so try until successful
-                    LOG.debug("Stopping attempt {}.".format(i))
-                    self.motor["velocity"].set(0 * q.deg / q.sec).join()
-                    time.sleep(1)
-                    if self.motor.state != 'moving':
-                        break
+                self.motor.stop().join()
                 self.camera.uca.start_readout()
                 for i in range(self.nsteps):
                     yield self.camera.grab()
@@ -457,12 +456,7 @@ class ACQsetup(object):
         with self.camera.recording():
             time.sleep(self.nsteps / float(self.camera.frame_rate.magnitude) * 1.05)
         self.ffcsetup.close_shutter()
-        for i in range(10):  # doesn't allays stop so try until successful
-            LOG.debug("Stopping attempt {}.".format(i))
-            self.motor["velocity"].set(0 * q.deg / q.sec).join()
-            time.sleep(1)
-            if self.motor.state != 'moving':
-                break
+        self.motor.stop().join()
         self.camera.uca.start_readout()
         for i in range(self.nsteps):
             yield self.camera.grab()
