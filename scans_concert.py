@@ -6,8 +6,6 @@ import numpy as np
 import atexit
 from time import sleep
 
-from concert.async import async, wait
-from concert.base import identity
 from concert.quantities import q
 from concert.experiments.base import Acquisition, Experiment
 from concert.experiments.imaging import (
@@ -341,9 +339,13 @@ class ACQsetup(object):
             self.camera.stop_recording()
             self.ffcsetup.close_shutter()
             LOG.debug("change velocity")
+            self.motor.wait_until_stop(timeout=0.5*q.sec)
             self.motor['stepvelocity'].set(self.motor.base_vel).join()
             LOG.debug("return to start")
-            time.sleep(2)
+            # the motor does not always move but moving a small amount first seems
+            # to result in the movement to the start position
+            self.motor['position'].set(self.motor.position + 0.1).join()
+            time.sleep(0.2)
             self.motor['position'].set(start).join()
         except Exception as exp:
             LOG.error(exp)
@@ -408,12 +410,7 @@ class ACQsetup(object):
                 with self.camera.recording():
                     time.sleep((self.nsteps * (self.exp_time + self.dead_time) * 1e-3) * 1.05)
                 self.ffcsetup.close_shutter()
-                for i in range(10):  # doesn't always stop so try until successful
-                    LOG.debug("Stopping attempt {}.".format(i))
-                    self.motor["velocity"].set(0 * q.deg / q.sec).join()
-                    time.sleep(1)
-                    if self.motor.state != 'moving':
-                        break
+                self.motor.stop().join()
                 self.camera.uca.start_readout()
                 for i in range(self.nsteps):
                     yield self.camera.grab()
@@ -459,12 +456,7 @@ class ACQsetup(object):
         with self.camera.recording():
             time.sleep(self.nsteps / float(self.camera.frame_rate.magnitude) * 1.05)
         self.ffcsetup.close_shutter()
-        for i in range(10):  # doesn't allays stop so try until successful
-            LOG.debug("Stopping attempt {}.".format(i))
-            self.motor["velocity"].set(0 * q.deg / q.sec).join()
-            time.sleep(1)
-            if self.motor.state != 'moving':
-                break
+        self.motor.stop().join()
         self.camera.uca.start_readout()
         for i in range(self.nsteps):
             yield self.camera.grab()
@@ -588,7 +580,7 @@ class ACQsetup(object):
         # take projections
         LOG.debug("Take projections.")
         try:
-            self.ffcsetup.open_shutter().join()
+            self.ffcsetup.open_shutter(True)
             region = np.linspace(self.start, self.range, self.nsteps) * q.deg
             if step_scan:
                 self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).result()
@@ -598,22 +590,23 @@ class ACQsetup(object):
             else:
                 vel = self.motor.calc_vel(
                     self.nsteps, total_time, self.range)
-                if vel > 365 * q.deg / q.sec:
+                if vel.magnitude > 365.0:
                     mesg = "Velocity is too high: {} > 365 deg/s".format(vel)
                     error_message(mesg)
                     LOG.error(mesg)
                     return
                 self.motor['stepvelocity'].set(vel).join()
                 # self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).join()
+                print("set step")
                 self.motor['stepangle'].set(self.step).join()
                 # self.motor.LENGTH = self.range * q.deg
                 self.motor.LENGTH = self.step * self.nsteps
                 LOG.debug("Velocity: {}, Step: {}, Range: {}".format(
                     self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
-                self.motor.PSO_multi(False).join()
-                LOG.debug("Expected time to wait: {} s".format(self.nsteps * (total_time / 1000.0) * 1.05))
-                time.sleep(self.nsteps * (total_time / 1000.0) * 1.05)
-            self.ffcsetup.close_shutter()
+                self.motor.PSO_multi(False)
+                # LOG.debug("Expected time to wait: {} s".format(self.nsteps * (total_time / 1000.0) * 1.05))
+                self.motor.wait_until_stop(timeout=1.0*q.sec)
+            self.ffcsetup.close_shutter(True)
         except Exception as exp:
             LOG.error("Problem with Tomo: {}".format(exp))
         # flats after

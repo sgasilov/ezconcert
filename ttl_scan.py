@@ -76,7 +76,7 @@ def take_ttl_tomo(self):
         else:
             vel = self.motor.calc_vel(
                 self.nsteps, total_time, self.range)
-            if vel > 365 * q.deg / q.sec:
+            if vel.magnitude > 365.0:
                 mesg = "Velocity is too high: {} > 365 deg/s".format(vel)
                 error_message(mesg)
                 LOG.error(mesg)
