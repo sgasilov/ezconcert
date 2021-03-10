@@ -1,12 +1,18 @@
 import atexit
 from PyQt5.QtCore import pyqtSignal, QObject, QThread, Qt
-from PyQt5 import QtGui
-from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, \
-    QPushButton, QDoubleSpinBox, QFrame, \
-    QSizePolicy
+from PyQt5.QtWidgets import (
+    QGridLayout,
+    QLabel,
+    QGroupBox,
+    QPushButton,
+    QDoubleSpinBox,
+    QFrame,
+    QSizePolicy,
+)
 from concert.base import TransitionNotAllowed
 from message_dialog import info_message, error_message
-# Adam's Concert-EPICS interface
+
+# Concert-EPICS interface
 from edc.shutter import CLSShutter
 from edc.motor import CLSLinear, ABRS, SimMotor
 from switch import Switch
@@ -16,9 +22,9 @@ from concert.quantities import q
 
 
 class QVSeparationLine(QFrame):
-    '''
-    a vertical separation line
-    '''
+    """
+    A vertical separation line.
+    """
 
     def __init__(self, *args, **kwargs):
         super(QVSeparationLine, self).__init__(*args, **kwargs)
@@ -30,9 +36,9 @@ class QVSeparationLine(QFrame):
 
 
 class QHSeparationLine(QFrame):
-    '''
-    a horizontal separation line
-    '''
+    """
+    A horizontal separation line.
+    """
 
     def __init__(self, *args, **kwargs):
         super(QHSeparationLine, self).__init__(*args, **kwargs)
@@ -44,7 +50,6 @@ class QHSeparationLine(QFrame):
 
 
 class MotorsControlsGroup(QGroupBox):
-
     def __init__(self, *args, **kwargs):
         super(MotorsControlsGroup, self).__init__(*args, **kwargs)
         # physical devices
@@ -54,8 +59,13 @@ class MotorsControlsGroup(QGroupBox):
         self.shutter = None
         self.time_motor = None
         self.connect_time_motor_func()
-        self.motors = [self.hor_motor, self.vert_motor,
-                       self.CT_motor, self.shutter, self.time_motor]
+        self.motors = [
+            self.hor_motor,
+            self.vert_motor,
+            self.CT_motor,
+            self.shutter,
+            self.time_motor,
+        ]
 
         # connect buttons
         self.connect_hor_mot_button = QPushButton("Horizontal")
@@ -187,15 +197,17 @@ class MotorsControlsGroup(QGroupBox):
         self.set_layout()
 
     def set_layout(self):
-        '''
-        object: columns
-        stop: 0
-        CT: 2 - 4
-        vertical: 6 - 8
-        horizontal: 10 - 12
-        shutter: 14 - 16
-        vertical lines: 1, 5, 9, 13
-        '''
+        """
+        Layout of widgets. Using a grid to layout the items.
+        The layout of the devices are by columns in sections.
+        device: columns
+        stop: 0 -1
+        CT: 3 -6
+        vertical: 8 - 10
+        horizontal: 12 - 14
+        shutter: 16 - 18
+        vertical lines: 2, 7, 11, 15
+        """
         layout = QGridLayout()
         # stop
         layout.addWidget(self.stop_motors_button, 2, 0, 1, 1)
@@ -246,6 +258,7 @@ class MotorsControlsGroup(QGroupBox):
         self.setLayout(layout)
 
     def connect_hor_motor_func(self):
+        """Connect to horizontal stage motor."""
         try:
             self.hor_motor = CLSLinear("SMTR1605-2-B10-11:mm", encoded=True)
         except:
@@ -258,10 +271,12 @@ class MotorsControlsGroup(QGroupBox):
             self.move_hor_rel_minus.setEnabled(True)
             self.hor_mot_monitor = EpicsMonitorFloat(self.hor_motor.RBV)
             self.hor_mot_monitor.i0_state_changed_signal.connect(
-                self.hor_mot_value.setText)
+                self.hor_mot_value.setText
+            )
             self.hor_mot_monitor.i0.run_callback(self.hor_mot_monitor.call_idx)
 
     def connect_vert_motor_func(self):
+        """Connect to vertical stage motor."""
         try:
             self.vert_motor = CLSLinear("SMTR1605-2-B10-10:mm", encoded=True)
         except:
@@ -274,10 +289,13 @@ class MotorsControlsGroup(QGroupBox):
             self.move_vert_rel_minus.setEnabled(True)
             self.vert_mot_monitor = EpicsMonitorFloat(self.vert_motor.RBV)
             self.vert_mot_monitor.i0_state_changed_signal.connect(
-                self.vert_mot_value.setText)
+                self.vert_mot_value.setText
+            )
             self.vert_mot_monitor.i0.run_callback(self.vert_mot_monitor.call_idx)
 
     def connect_CT_motor_func(self):
+        """Connect to CT stage.
+        In this case, ABRS is an air-bearing rotation stage."""
         try:
             self.CT_motor = ABRS("ABRS1605-01:deg", encoded=True)
         except:
@@ -294,10 +312,12 @@ class MotorsControlsGroup(QGroupBox):
             self.CT_motor.base_vel = 5 * q.deg / q.sec
             self.CT_mot_monitor = EpicsMonitorFloat(self.CT_motor.RBV)
             self.CT_mot_monitor.i0_state_changed_signal.connect(
-                self.CT_mot_value.setText)
+                self.CT_mot_value.setText
+            )
             self.CT_mot_monitor.i0.run_callback(self.CT_mot_monitor.call_idx)
 
     def connect_shutter_func(self):
+        """Connect the shutter."""
         try:
             self.shutter = CLSShutter("ABRS1605-01:fis")
         except:
@@ -309,16 +329,19 @@ class MotorsControlsGroup(QGroupBox):
             self.close_shutter_button.setEnabled(True)
             self.shutter_monitor = EpicsMonitorFIS(self.shutter.STATE)
             self.shutter_monitor.i0_state_changed_signal.connect(
-                self.shutter_status.setText)
+                self.shutter_status.setText
+            )
             self.shutter_monitor.i0.run_callback(self.shutter_monitor.call_idx)
 
     def connect_time_motor_func(self):
+        """Connect to a SimMotor."""
         try:
-            self.time_motor = SimMotor(1.0*q.mm)
+            self.time_motor = SimMotor(1.0 * q.mm)
         except:
             error_message("Can not connect to timer")
 
     def open_shutter_func(self):
+        """Open shutter."""
         if self.shutter is None:
             return
         else:
@@ -328,6 +351,7 @@ class MotorsControlsGroup(QGroupBox):
                 return
 
     def close_shutter_func(self):
+        """Close shutter."""
         if self.shutter is None:
             return
         else:
@@ -337,7 +361,7 @@ class MotorsControlsGroup(QGroupBox):
                 return
 
     def CT_home_func(self):
-        '''Home the stage'''
+        """Home the stage."""
         if self.CT_motor is None:
             return
         else:
@@ -351,7 +375,7 @@ class MotorsControlsGroup(QGroupBox):
             # self.CT_move_func()
 
     def CT_move_func(self):
-        '''Move the stage'''
+        """Move the stage to a selected position."""
         if self.CT_motor is None:
             return
         else:
@@ -361,29 +385,31 @@ class MotorsControlsGroup(QGroupBox):
             self.motion_CT.start()
 
     def CT_rel_plus_func(self):
-        '''Move the stage a relative amount'''
+        """Move the stage a relative amount in positive direction."""
         if self.CT_motor is None:
             return
         else:
             # self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
             self.CT_motor.stepvelocity = self.CT_motor.base_vel
             self.motion_CT = MotionThread(
-                self.CT_motor, self.CT_mot_pos_move, self.CT_mot_rel_move, 1)
+                self.CT_motor, self.CT_mot_pos_move, self.CT_mot_rel_move, 1
+            )
             self.motion_CT.start()
 
     def CT_rel_minus_func(self):
-        '''Move the stage a relative amount'''
+        """Move the stage a relative amount in negative direction"""
         if self.CT_motor is None:
             return
         else:
             # self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
             self.CT_motor.stepvelocity = self.CT_motor.base_vel
             self.motion_CT = MotionThread(
-                self.CT_motor, self.CT_mot_pos_move, self.CT_mot_rel_move, -1)
+                self.CT_motor, self.CT_mot_pos_move, self.CT_mot_rel_move, -1
+            )
             self.motion_CT.start()
 
     def CT_reset_func(self):
-        '''Reset the stage and move to home'''
+        """Reset the stage and move to home."""
         if self.CT_motor is None:
             return
         else:
@@ -393,16 +419,17 @@ class MotorsControlsGroup(QGroupBox):
             info_message("Reset finished. Please wait for state motion to stop.")
 
     def CT_vel_func(self):
-        """Select base velocity"""
+        """Select base velocity."""
         if self.CT_motor is None:
             return
         else:
             if self.CT_vel_select.isChecked():
-                self.CT_motor.base_vel = 20 * q.deg/q.sec
+                self.CT_motor.base_vel = 20 * q.deg / q.sec
             else:
-                self.CT_motor.base_vel = 5 * q.deg/q.sec
+                self.CT_motor.base_vel = 5 * q.deg / q.sec
 
     def hor_move_func(self):
+        """Move the horizontal motor to a selected position."""
         if self.hor_motor is None:
             return
         else:
@@ -410,20 +437,27 @@ class MotorsControlsGroup(QGroupBox):
             self.motion_hor.start()
 
     def hor_rel_plus_func(self):
+        """Move the horizontal motor a relative amount in positive direction."""
         if self.hor_motor is None:
             return
         else:
-            self.motion_hor = MotionThread(self.hor_motor, self.hor_mot_pos_move, self.hor_mot_rel_move, 1)
+            self.motion_hor = MotionThread(
+                self.hor_motor, self.hor_mot_pos_move, self.hor_mot_rel_move, 1
+            )
             self.motion_hor.start()
 
     def hor_rel_minus_func(self):
+        """Move the horizontal motor a relative amount in negative direction."""
         if self.hor_motor is None:
             return
         else:
-            self.motion_hor = MotionThread(self.hor_motor, self.hor_mot_pos_move, self.hor_mot_rel_move, -1)
+            self.motion_hor = MotionThread(
+                self.hor_motor, self.hor_mot_pos_move, self.hor_mot_rel_move, -1
+            )
             self.motion_hor.start()
 
     def vert_move_func(self):
+        """Move the vertical motor to a selected position."""
         if self.vert_motor is None:
             return
         else:
@@ -431,17 +465,23 @@ class MotorsControlsGroup(QGroupBox):
             self.motion_vert.start()
 
     def vert_rel_plus_func(self):
+        """Move the vertical motor a relative amount in positive direction."""
         if self.vert_motor is None:
             return
         else:
-            self.motion_vert = MotionThread(self.vert_motor, self.vert_mot_pos_move, self.vert_mot_rel_move, 1)
+            self.motion_vert = MotionThread(
+                self.vert_motor, self.vert_mot_pos_move, self.vert_mot_rel_move, 1
+            )
             self.motion_vert.start()
 
     def vert_rel_minus_func(self):
+        """Move the vertical motor a relative amount in negative direction."""
         if self.vert_motor is None:
             return
         else:
-            self.motion_vert = MotionThread(self.vert_motor, self.vert_mot_pos_move, self.vert_mot_rel_move, -1)
+            self.motion_vert = MotionThread(
+                self.vert_motor, self.vert_mot_pos_move, self.vert_mot_rel_move, -1
+            )
             self.motion_vert.start()
 
     def stop_motors_func(self):
@@ -492,18 +532,17 @@ class EpicsMonitorFIS(QObject):
         """
         self.value = value
         if value == 1:
-            value_str = 'Open'
+            value_str = "Open"
         elif value == 2:
-            value_str = 'Between'
+            value_str = "Between"
         elif value == 4:
-            value_str = 'Closed'
+            value_str = "Closed"
         else:
-            value_str = 'Error'
+            value_str = "Error"
         self.i0_state_changed_signal.emit(value_str)
 
 
 class MotionThread(QThread):
-
     def __init__(self, motor, position, rel_position=None, direction=1):
         super(MotionThread, self).__init__()
         self.motor = motor
@@ -524,7 +563,9 @@ class MotionThread(QThread):
                 if self.rel_position is None:
                     final_pos = self.position.value() * self.motor.UNITS
                 else:
-                    final_pos += self.rel_position.value() * self.direction * self.motor.UNITS
+                    final_pos += (
+                        self.rel_position.value() * self.direction * self.motor.UNITS
+                    )
                 self.motor.position = final_pos
                 self.thread_running = False
             except TransitionNotAllowed:
@@ -539,7 +580,6 @@ class MotionThread(QThread):
 
 
 class HomeThread(QThread):
-
     def __init__(self, motor):
         super(HomeThread, self).__init__()
         self.motor = motor
@@ -567,7 +607,6 @@ class HomeThread(QThread):
 
 
 class ResetThread(QThread):
-
     def __init__(self, motor):
         super(ResetThread, self).__init__()
         self.motor = motor
