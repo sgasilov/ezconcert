@@ -1,7 +1,4 @@
-# Adam's Concert-EPICS interface
 import os
-
-
 # PyQT imports
 from PyQt5.QtWidgets import QGroupBox, QDialog, QApplication, QGridLayout
 from PyQt5.QtWidgets import QLabel, QPushButton, QDoubleSpinBox
@@ -37,20 +34,13 @@ import argparse
 # Dark style
 # noinspection PyUnresolvedReferences
 from styles.breeze import styles_breeze
-
+from edc import log
 concert.require("0.11.0")
-LOG = logging.getLogger("ezconcert")
-LOG.setLevel(logging.DEBUG)
-# create handlers
-ch = logging.StreamHandler()
-fh = logging.FileHandler('ezconcert.log')
-# formatter
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-ch.setFormatter(formatter)
-fh.setFormatter(formatter)
-# add handlers
-# LOG.addHandler(ch)
-LOG.addHandler(fh)
+
+# use logging from EDC
+log.log_to_file("ezconcert.log", logging.DEBUG)
+LOG = log.get_module_logger(__name__)
+
 
 def process_cl_args():
     parser = argparse.ArgumentParser()
@@ -471,7 +461,7 @@ class GUI(QDialog):
 if __name__ == '__main__':
     parsed_args, unparsed_args = process_cl_args()
     if parsed_args.debug:
-        LOG.addHandler(ch)
+        log.log_to_console(level=logging.DEBUG)
     # QApplication expects the first argument to be the program name.
     qt_args = sys.argv[:1] + unparsed_args
     app = QApplication(qt_args)

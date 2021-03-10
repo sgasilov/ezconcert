@@ -18,8 +18,9 @@ from concert.coroutines.base import coroutine, inject
 from concert.experiments.addons import Consumer, ImageWriter
 from message_dialog import info_message, error_message, warning_message
 from concert.storage import DirectoryWalker
+from edc import log
 
-LOG = logging.getLogger("ezconcert.scans")
+LOG = log.get_module_logger(__name__)
 
 def run(n, callback):
     for i in range(n):
