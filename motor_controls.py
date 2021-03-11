@@ -81,15 +81,19 @@ class MotorsControlsGroup(QGroupBox):
         # device labels
         self.CT_mot_label = QLabel()
         self.CT_mot_label.setText("<b>CT STAGE</b>")
+        self.CT_mot_label.setStyleSheet("color: green")
         self.CT_mot_label.setAlignment(Qt.AlignCenter)
         self.vert_mot_label = QLabel()
         self.vert_mot_label.setText("<b>SAMPLE VERTICAL</b>")
+        self.vert_mot_label.setStyleSheet("color: green")
         self.vert_mot_label.setAlignment(Qt.AlignCenter)
         self.hor_mot_label = QLabel()
         self.hor_mot_label.setText("<b>SAMPLE HORIZONTAL</b>")
+        self.hor_mot_label.setStyleSheet("color: green")
         self.hor_mot_label.setAlignment(Qt.AlignCenter)
         self.shutter_label = QLabel()
         self.shutter_label.setText("<b>IMAGING SHUTTER</b>")
+        self.shutter_label.setStyleSheet("color: green")
         self.shutter_label.setAlignment(Qt.AlignCenter)
 
         # position indicators
@@ -143,16 +147,22 @@ class MotorsControlsGroup(QGroupBox):
         self.close_shutter_button = QPushButton("Close")
         self.close_shutter_button.setEnabled(False)
         self.move_hor_rel_plus = QPushButton("+")
+        self.move_hor_rel_plus.setStyleSheet("font: bold")
         self.move_hor_rel_plus.setEnabled(False)
         self.move_vert_rel_plus = QPushButton("+")
+        self.move_vert_rel_plus.setStyleSheet("font: bold")
         self.move_vert_rel_plus.setEnabled(False)
         self.move_CT_rel_plus = QPushButton("+")
+        self.move_CT_rel_plus.setStyleSheet("font: bold")
         self.move_CT_rel_plus.setEnabled(False)
         self.move_hor_rel_minus = QPushButton("-")
+        self.move_hor_rel_minus.setStyleSheet("font: bold")
         self.move_hor_rel_minus.setEnabled(False)
         self.move_vert_rel_minus = QPushButton("-")
+        self.move_vert_rel_minus.setStyleSheet("font: bold")
         self.move_vert_rel_minus.setEnabled(False)
         self.move_CT_rel_minus = QPushButton("-")
+        self.move_CT_rel_minus.setStyleSheet("font: bold")
         self.move_CT_rel_minus.setEnabled(False)
 
         # signals
@@ -327,7 +337,9 @@ class MotorsControlsGroup(QGroupBox):
             self.connect_shutter_button.setEnabled(False)
             self.open_shutter_button.setEnabled(True)
             self.close_shutter_button.setEnabled(True)
-            self.shutter_monitor = EpicsMonitorFIS(self.shutter.STATE)
+            self.shutter_monitor = EpicsMonitorFIS(
+                self.shutter.STATE, self.shutter_status
+            )
             self.shutter_monitor.i0_state_changed_signal.connect(
                 self.shutter_status.setText
             )
@@ -518,11 +530,12 @@ class EpicsMonitorFloat(QObject):
 class EpicsMonitorFIS(QObject):
     i0_state_changed_signal = pyqtSignal(str)
 
-    def __init__(self, PV):
+    def __init__(self, PV, label):
         super(EpicsMonitorFIS, self).__init__()
         self.i0 = PV
         self.call_idx = PV.add_callback(self.on_i0_state_changed)
         self.value = None
+        self.label = label
 
     def on_i0_state_changed(self, value, **kwargs):
         """
@@ -533,12 +546,16 @@ class EpicsMonitorFIS(QObject):
         self.value = value
         if value == 1:
             value_str = "Open"
+            self.label.setStyleSheet("color: green")
         elif value == 2:
             value_str = "Between"
+            self.label.setStyleSheet("color: yellow")
         elif value == 4:
             value_str = "Closed"
+            self.label.setStyleSheet("color: red")
         else:
             value_str = "Error"
+            self.label.setStyleSheet("color: red")
         self.i0_state_changed_signal.emit(value_str)
 
 
