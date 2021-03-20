@@ -11,13 +11,15 @@ LOG.setLevel(logging.DEBUG)
 # create handlers
 ch = logging.StreamHandler()
 # formatter
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 ch.setFormatter(formatter)
 # add handlers
 LOG.addHandler(ch)
 
+
 def error_message(msg):
     LOG.info(msg)
+
 
 def take_ttl_tomo(self):
     """Scan using triggers to camera. The camera is assumed to be controlled externally"""
@@ -34,11 +36,11 @@ def take_ttl_tomo(self):
     # go to start
     if goto_start:
         try:
-            self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
+            self.motor["stepvelocity"].set(5.0 * q.deg / q.sec).join()
             # the motor does not always move but moving a small amount first seems
             # to result in the movement to the start position
-            future = self.motor['position'].set(self.motor.position + 0.1).join()
-            future = self.motor['position'].set(self.start * q.deg).join()
+            future = self.motor["position"].set(self.motor.position + 0.1).join()
+            future = self.motor["position"].set(self.start * q.deg).join()
             result = future.result()
         except Exception as exp:
             LOG.error("Problem with returning to start position: {}".format(exp))
@@ -69,23 +71,27 @@ def take_ttl_tomo(self):
         self.ffcsetup.open_shutter().join()
         region = np.linspace(self.start, self.range, self.nsteps) * q.deg
         if step_scan:
-            self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).result()
+            self.motor["stepvelocity"].set(5.0 * q.deg / q.sec).result()
             for pos in region:
                 self.motor.position = pos
                 self.motor.PSO_ttl(1, total_time)
         else:
-            vel = self.motor.calc_vel(
-                self.nsteps, total_time, self.range)
+            vel = self.motor.calc_vel(self.nsteps, total_time, self.range)
             if vel.magnitude > 365.0:
                 mesg = "Velocity is too high: {} > 365 deg/s".format(vel)
                 error_message(mesg)
                 LOG.error(mesg)
                 return
-            self.motor['stepvelocity'].set(vel).result()
-            self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).result()
+            self.motor["stepvelocity"].set(vel).result()
+            self.motor["stepangle"].set(
+                float(self.range) / float(self.nsteps) * q.deg
+            ).result()
             self.motor.LENGTH = self.range * q.deg
-            LOG.debug("Velocity: {}, Step: {}, Range: {}".format(
-                self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
+            LOG.debug(
+                "Velocity: {}, Step: {}, Range: {}".format(
+                    self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH
+                )
+            )
             self.motor.PSO_multi(False).join()
             time.sleep(self.nsteps * (total_time / 1000.0) * 1.05)
         self.ffcsetup.close_shutter()
@@ -106,13 +112,13 @@ def take_ttl_tomo(self):
     # go to start
     if goto_start:
         try:
-            self.motor['stepvelocity'].set(20.0 * q.deg / q.sec)
+            self.motor["stepvelocity"].set(20.0 * q.deg / q.sec)
             # the motor does not always move but moving a small amount first seems
             # to result in the movement to the start position
-            future = self.motor['position'].set(self.motor.position + 0.1).join()
-            future = self.motor['position'].set(self.start * q.deg).join()
+            future = self.motor["position"].set(self.motor.position + 0.1).join()
+            future = self.motor["position"].set(self.start * q.deg).join()
             result = future.result()
-            self.motor['stepvelocity'].set(5.0 * q.deg / q.sec)
+            self.motor["stepvelocity"].set(5.0 * q.deg / q.sec)
         except Exception as exp:
             LOG.error("Problem with returning to start position: {}".format(exp))
 

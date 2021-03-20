@@ -21,9 +21,11 @@ import docopt
 ABRS_NAME = "ABRS1605-01:deg"
 air_rot = ABRS(ABRS_NAME)
 
+
 def test_n_ttl(Num, Gap=100):
     air_rot.PSO_ttl(Num, Gap).join()
 
+
 if __name__ == ("__main__"):
-    args = docopt.docopt(__doc__, version = 'Jan 15, 2021')
-    test_n_ttl(int(args['<num>']), int(args['<gap>']))
+    args = docopt.docopt(__doc__, version="Jan 15, 2021")
+    test_n_ttl(int(args["<num>"]), int(args["<gap>"]))
