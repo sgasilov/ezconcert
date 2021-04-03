@@ -1,5 +1,5 @@
 """CT scans with the ufo-kit Concert"""
-import logging
+
 import time
 from contextlib import contextmanager
 import numpy as np
@@ -89,9 +89,6 @@ class ConcertScanThread(QThread):
             error_message("Can not set camera parameters")
             #self.abort_scan()
 
-
-
-
     def stop(self):
         self.thread_running = False
         self.wait()
@@ -156,7 +153,7 @@ class ACQsetup(object):
         self.flats_before = False
         self.flats_after = False
         # acquisitions
-        # flats/darks (always softr with immidiate transfer)
+        # flats/darks (always softr with immediate transfer)
         self.flats_softr = Acquisition('flats', self.take_flats_softr)
         self.flats2_softr = Acquisition('flats2', self.take_flats_softr)
         self.darks_softr = Acquisition('darks', self.take_darks_softr)
@@ -251,7 +248,7 @@ class ACQsetup(object):
 
     def take_tomo_softr(self):
         """A generator which yields projections."""
-        LOG.info("Start software triggerd scan")
+        LOG.info("Start software triggered scan")
         start = self.motor.position
         try:
             if self.motor.name.startswith('ABRS'):
@@ -540,7 +537,7 @@ class ACQsetup(object):
         step_scan = False
         goto_start = True
         total_time = self.exp_time + self.dead_time
-        if (total_time) < 10.0:
+        if total_time < 10.0:
             mesg = "Time is too short for TTL pulses: {} < 10 ms".format(total_time)
             error_message(mesg)
             LOG.error(mesg)
@@ -552,9 +549,8 @@ class ACQsetup(object):
                 self.motor['stepvelocity'].set(5.0 * q.deg / q.sec).join()
                 # the motor does not always move but moving a small amount first seems
                 # to result in the movement to the start position
-                future = self.motor['position'].set(self.motor.position + 0.1).join()
-                future = self.motor['position'].set(self.start * q.deg).join()
-                result = future.result()
+                self.motor['position'].set(self.motor.position + 0.1).join()
+                self.motor['position'].set(self.start * q.deg).join()
             except Exception as exp:
                 LOG.error("Problem with returning to start position: {}".format(exp))
         # flats before
@@ -589,8 +585,7 @@ class ACQsetup(object):
                     self.motor.position = pos
                     self.motor.PSO_ttl(1, total_time)
             else:
-                vel = self.motor.calc_vel(
-                    self.nsteps, total_time, self.range)
+                vel = self.motor.calc_vel(self.nsteps, total_time, self.range)
                 if vel.magnitude > 365.0:
                     mesg = "Velocity is too high: {} > 365 deg/s".format(vel)
                     error_message(mesg)
@@ -598,7 +593,6 @@ class ACQsetup(object):
                     return
                 self.motor['stepvelocity'].set(vel).join()
                 # self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).join()
-                print("set step")
                 self.motor['stepangle'].set(self.step).join()
                 # self.motor.LENGTH = self.range * q.deg
                 self.motor.LENGTH = self.step * self.nsteps
@@ -638,9 +632,8 @@ class ACQsetup(object):
                 self.motor['stepvelocity'].set(20.0 * q.deg / q.sec)
                 # the motor does not always move but moving a small amount first seems
                 # to result in the movement to the start position
-                future = self.motor['position'].set(self.motor.position + 0.1).join()
-                future = self.motor['position'].set(self.start * q.deg).join()
-                result = future.result()
+                self.motor['position'].set(self.motor.position + 0.1).join()
+                self.motor['position'].set(self.start * q.deg).join()
                 self.motor['stepvelocity'].set(5.0 * q.deg / q.sec)
             except Exception as exp:
                 LOG.error("Problem with returning to start position: {}".format(exp))
