@@ -1,8 +1,17 @@
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtCore import QObject, QSize, QPointF, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSlot, Qt
-from PyQt5.QtGui import  QPainter, QPalette, QLinearGradient, QGradient
-from PyQt5.QtWidgets import QAbstractButton, QApplication, QWidget, QHBoxLayout, QLabel
+from PyQt5.QtCore import (
+    QObject,
+    QSize,
+    QPointF,
+    QPropertyAnimation,
+    QEasingCurve,
+    pyqtProperty,
+    pyqtSlot,
+    Qt,
+)
+from PyQt5.QtGui import QPainter, QPalette, QLinearGradient, QGradient
+from PyQt5.QtWidgets import QAbstractButton, QApplication
 
 
 class SwitchPrivate(QObject):
@@ -15,7 +24,7 @@ class SwitchPrivate(QObject):
 
         self.animation = QPropertyAnimation(self)
         self.animation.setTargetObject(self)
-        self.animation.setPropertyName(b'position')
+        self.animation.setPropertyName(b"position")
         self.animation.setStartValue(0.0)
         self.animation.setEndValue(1.0)
         self.animation.setDuration(200)
@@ -34,7 +43,7 @@ class SwitchPrivate(QObject):
 
     def draw(self, painter):
         r = self.mPointer.rect()
-        margin = r.height()/10
+        margin = r.height() / 10
         shadow = self.mPointer.palette().color(QPalette.Dark)
         light = self.mPointer.palette().color(QPalette.Light)
         button = self.mPointer.palette().color(QPalette.Button)
@@ -45,26 +54,32 @@ class SwitchPrivate(QObject):
         self.mGradient.setStart(0, r.height())
         self.mGradient.setFinalStop(0, 0)
         painter.setBrush(self.mGradient)
-        painter.drawRoundedRect(r, r.height()/2, r.height()/2)
+        painter.drawRoundedRect(r, r.height() / 2, r.height() / 2)
 
         self.mGradient.setColorAt(0, shadow.darker(140))
         self.mGradient.setColorAt(1, light.darker(160))
         self.mGradient.setStart(0, 0)
         self.mGradient.setFinalStop(0, r.height())
         painter.setBrush(self.mGradient)
-        painter.drawRoundedRect(r.adjusted(margin, margin, -margin, -margin), r.height()/2, r.height()/2)
+        painter.drawRoundedRect(
+            r.adjusted(margin, margin, -margin, -margin), r.height() / 2, r.height() / 2
+        )
 
         self.mGradient.setColorAt(0, button.darker(130))
         self.mGradient.setColorAt(1, button)
 
         painter.setBrush(self.mGradient)
 
-        x = r.height()/2.0 + self.mPosition*(r.width()-r.height())
-        painter.drawEllipse(QPointF(x, r.height()/2), r.height()/2-margin, r.height()/2-margin)
+        x = r.height() / 2.0 + self.mPosition * (r.width() - r.height())
+        painter.drawEllipse(
+            QPointF(x, r.height() / 2), r.height() / 2 - margin, r.height() / 2 - margin
+        )
 
-    @pyqtSlot(bool, name='animate')
+    @pyqtSlot(bool, name="animate")
     def animate(self, checked):
-        self.animation.setDirection(QPropertyAnimation.Forward if checked else QPropertyAnimation.Backward)
+        self.animation.setDirection(
+            QPropertyAnimation.Forward if checked else QPropertyAnimation.Backward
+        )
         self.animation.start()
 
     def __del__(self):
@@ -93,8 +108,9 @@ class Switch(QAbstractButton):
         del self.dPtr
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import sys
+
     app = QApplication(sys.argv)
     w = Switch()
     w.show()
