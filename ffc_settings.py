@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import QGridLayout, QHBoxLayout
 from PyQt5.QtWidgets import QLabel, QGroupBox, QLineEdit, QPushButton, QComboBox, QCheckBox
 
-from message_dialog import info_message
+from message_dialog import info_message, error_message
 
 
 class FFCSettingsGroup(QGroupBox):
@@ -70,25 +70,35 @@ class FFCSettingsGroup(QGroupBox):
         try:
             return float(self.flat_position_entry.text())
         except ValueError:
-            return None
+            error_message('Out-of-beam sample position is not defined correctly')
 
     @property
     def radio_position(self):
         try:
             return float(self.radio_position_entry.text())
         except ValueError:
-            return None
+            error_message('In-beam sample position is not defined correctly')
 
     @property
     def num_flats(self):
         try:
-            return int(self.numflats_entry.text())
+            tmp = int(self.numflats_entry.text())
         except ValueError:
-            return None
+            error_message('Number of flats must be positive integer number')
+        if tmp < 1:
+            info_message('Number of flats must be larger than 0')
+            self.numflats_entry.setText('10')
+            tmp = 10
+        return tmp
 
     @property
     def num_darks(self):
         try:
-            return int(self.numdarks_entry.text())
+            tmp = int(self.numdarks_entry.text())
         except ValueError:
-            return None
+            error_message('Number of darks must be non-negative integer number')
+        if tmp < 0:
+            info_message('Number of darks must be 0 or larger')
+            self.numdarks_entry.setText('10')
+            tmp = 10
+        return tmp

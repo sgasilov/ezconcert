@@ -10,12 +10,12 @@ from message_dialog import info_message, error_message, warning_message
 
 from concert.devices.cameras.uca import Camera as UcaCamera
 from concert.devices.cameras.dummy import Camera as DummyCamera
-from concert.storage import write_tiff
 from concert.quantities import q
 import os.path as osp
 from matplotlib import pyplot as plt
 from concert.devices.cameras.base import CameraError
 from concert.storage import write_tiff
+from concert.writers import TiffWriter
 import os
 
 class CameraControlsGroup(QGroupBox):
@@ -109,11 +109,11 @@ class CameraControlsGroup(QGroupBox):
         self.viewer_lowlim_label = QLabel()
         self.viewer_lowlim_label.setText("Viewer low limit")
         self.viewer_lowlim_entry = QLineEdit()
-        self.viewer_lowlim_entry.setText("100")
+        self.viewer_lowlim_entry.setText("80")
         self.viewer_highlim_label = QLabel()
         self.viewer_highlim_label.setText("Viewer high limit")
         self.viewer_highlim_entry = QLineEdit()
-        self.viewer_highlim_entry.setText("1000")
+        self.viewer_highlim_entry.setText("120")
 
         # ROI
         # y0
@@ -204,6 +204,16 @@ class CameraControlsGroup(QGroupBox):
             viewer=self.viewer, camera=self.camera)
         self.live_preview_thread.start()
 
+        # Thread for live preview
+        self.readout_thread = ReadoutThread(camera=self.camera)
+        self.readout_thread.start()
+
+        # signals
+        self.delay_entry.editingFinished.connect(self.relate_fps_to_exptime)
+        self.exposure_entry.editingFinished.connect(self.relate_fps_to_exptime)
+        self.readout_thread.readout_over_signal.connect(self.readout_over_func)
+        self.time_stamp.stateChanged.connect(self.set_time_stamp)
+
         self.all_cam_params_correct = True
         self.set_layout()
 
@@ -261,7 +271,7 @@ class CameraControlsGroup(QGroupBox):
 
         layout.addWidget(self.time_stamp, 7, 4)
 
-        layout.addWidget(self.lv_session_info, 8, 4, 1, 2)
+        #layout.addWidget(self.lv_session_info, 8, 4, 1, 2)
 
         for column in range(6):
             layout.setColumnStretch(column, 1)
@@ -291,12 +301,16 @@ class CameraControlsGroup(QGroupBox):
         self.connect_to_camera_status.setStyleSheet("color: orange")
 
         try:
-            self.camera = UcaCamera('pco')
+            self.camera = UcaCamera('pcoclhs')
         except:
-            self.on_camera_connect_failure()
+            try:
+                self.camera = UcaCamera('pcoclhs')
+            except:
+                self.on_camera_connect_failure()
 
         if self.camera is not None:
             self.on_camera_connect_success()
+
 
     def connect_to_dummy_camera(self):
         self.camera = DummyCamera()
@@ -305,8 +319,7 @@ class CameraControlsGroup(QGroupBox):
         self.camera_model_label.setText("Dummy camera")
         self.exposure_entry.setText("{:.02f}".format(
             self.camera.exposure_time.magnitude * 1000))
-        self.fps_entry.setText("{:.02f}".format(
-            1000.0 / self.exp_time))
+        self.fps_entry.setText("{:.02f}".format(int(1000.0 / self.exp_time)))
         self.roi_height_entry.setText("{}".format(self.camera.roi_height.magnitude))
         self.roi_width_entry.setText("{}".format(self.camera.roi_width.magnitude))
         self.roi_y0_entry.setText("{}".format(self.camera.roi_y0.magnitude))
@@ -330,6 +343,7 @@ class CameraControlsGroup(QGroupBox):
         self.ttl_scan.setEnabled(False)
         self.buffered_entry.setEnabled(False)
         self.n_buffers_entry.setEnabled(False)
+        self.camera.timestamp_mode = self.camera.uca.enum_values.timestamp_mode.NONE
         # identify model
         if self.camera.sensor_width.magnitude == 2000:
             self.camera_model_label.setText("PCO Dimax")
@@ -358,8 +372,8 @@ class CameraControlsGroup(QGroupBox):
         # set default values
         self.exposure_entry.setText("{:.02f}".format(
             self.camera.exposure_time.magnitude*1000))
-        self.fps_entry.setText("{:.02f}".format(
-            1000.0/self.exp_time))
+        self.fps_entry.setText("{}".format(
+            int(1000.0/self.exp_time)))
         self.roi_height_entry.setText("{}".format(self.camera.roi_height.magnitude))
         self.roi_height_label.setText("ROI height, lines (max. {})".format(
             self.camera.sensor_height.magnitude))
@@ -373,10 +387,12 @@ class CameraControlsGroup(QGroupBox):
         #sensor_vertical_binning
         # sensor_horizontal_vertical_binning
         self.live_preview_thread.camera = self.camera
+        self.readout_thread.camera = self.camera
         self.camera_connected_signal.emit(self.camera)
         self.live_on_button.setEnabled(True)
         self.live_off_button.setEnabled(True)
         self.save_one_image_button.setEnabled(True)
+
 
     def on_camera_connect_failure(self):
         """
@@ -396,7 +412,7 @@ class CameraControlsGroup(QGroupBox):
         if self.camera.state == "recording":
             self.camera.stop_recording()
         self.camera.exposure_time = self.exp_time * q.msec
-        self.camera.frame_rate = self.fps * q.hertz
+        #self.camera.frame_rate = self.fps * q.hertz
         if self.camera_model_label.text() == 'Dummy camera':
             pass
         else:
@@ -408,6 +424,12 @@ class CameraControlsGroup(QGroupBox):
         self.camera.start_recording()
         self.live_preview_thread.live_on = True
         self.lv_duration = time.time()
+
+    def set_time_stamp(self):
+        if self.time_stamp.isChecked():
+            self.camera.timestamp_mode = self.camera.uca.enum_values.timestamp_mode.BINARY
+        else:
+            self.camera.timestamp_mode = self.camera.uca.enum_values.timestamp_mode.NONE
 
     def setROI(self):
         try:
@@ -433,37 +455,35 @@ class CameraControlsGroup(QGroupBox):
         self.frames_in_last_lv_seq = 0.0
         if self.camera_model_label.text() == 'PCO Dimax':# or self.buffered:
             self.save_lv_sequence_button.setEnabled(True)
-            self.frames_in_last_lv_seq = self.camera.recorded_frames
-        self.lv_session_info.setText("Recorded {0} frames in {1:.03f} seconds".
+            self.frames_in_last_lv_seq = self.camera.recorded_frames.magnitude
+            self.setTitle("Camera controls. Status: recorded {0} frames in {1:.03f} seconds".
                                      format(self.frames_in_last_lv_seq,self.lv_duration))
 
     def save_lv_seq(self):
+        self.abort_transfer_button.setEnabled(True)
+        self.save_lv_sequence_button.setEnabled(False)
+        self.live_on_button.setEnabled(False)
+        self.save_one_image_button.setEnabled(False)
+        # Get file name
         f, fext = self.QFD.getSaveFileName(
             self, 'Select dir and enter prefix', self.last_dir, "Image Files (*.tif)")
         if f == self.last_dir:
-            f += "/im-"
+            f += "/im-seq-00"
         self.last_dir = os.path.dirname(f)
-        self.frames_grabbed_so_far = 0
-        tmp = time.time()
-        self.abort_transfer = False
-        self.abort_transfer_button.setEnabled(True)
-        self.camera.uca.start_readout()
-        while True and not self.abort_transfer:
-            try:
-                fname = f + "{:>04d}".format(self.frames_grabbed_so_far)+'.tif'
-                write_tiff(fname, self.camera.grab())
-                self.frames_grabbed_so_far += 1
-            except CameraError:
-                # No more frames
-                break
-        self.camera.uca.stop_readout()
-        info_message("Saved {0} images in {1} sec".
-                     format(self.frames_grabbed_so_far, int(time.time()-tmp)))
-        self.save_lv_sequence_button.setEnabled(False)
-        self.abort_transfer_button.setEnabled(False)
+
+        # Start readout
+        self.readout_thread.filename = f + '.tif'
+        self.readout_thread.readout_on = True
+
 
     def abort_transfer_func(self):
-        self.abort_transfer = True
+        ## Readuot Thread
+        self.readout_thread.abort_transfer = True
+        self.abort_transfer_button.setEnabled(False)
+
+    def readout_over_func(self, val):
+        self.live_on_button.setEnabled(val)
+        self.save_one_image_button.setEnabled(val)
         self.abort_transfer_button.setEnabled(False)
 
     def save_one_image(self):
@@ -507,32 +527,32 @@ class CameraControlsGroup(QGroupBox):
         try:
             x = float(self.exposure_entry.text())
         except ValueError:
-            error_message("{:}".format("Exp. time must be a positive number"))
+            error_message("{:}".format("Exp. time must be a positive number. Setting to default"))
+            x = 13
             self.all_cam_params_correct = False
         if x < 0:
-            error_message("{:}".format("Exp. time must be positive"))
+            error_message("{:}".format("Exp. time must be positive. Setting to default"))
+            x = 13
+            self.exposure_entry.setText('13')
             self.all_cam_params_correct = False
         if self.camera_model_label.text() == 'PCO Dimax' and (x > 40):
             error_message("{:}".format("Max exp. time for Dimax is 40 msec"))
             self.all_cam_params_correct = False
+            x = 39.9
+            self.exposure_entry.setText('39.9')
         if self.camera_model_label.text() == 'PCO Edge' and (x > 2000):
             error_message("{:}".format("Max exp. time for Edge is 2 sec"))
+            x = 1999.9
+            self.exposure_entry.setText('1999.9')
             self.all_cam_params_correct = False
         return x
 
     def relate_fps_to_exptime(self):
         if self.trig_mode == "EXTERNAL":
-            x = 1000.0 / (self.exp_time + self.dead_time)
+            x = int(1000.0 / (self.exp_time + self.dead_time))
         else:
-            x = 1000.0 / self.exp_time
+            x = int(1000.0 / self.exp_time)
         self.fps_entry.setText("{:.02f}".format(x))
-
-    # def relate_fps_to_deadtime(self):
-    #     if self.trigger_entry.text() == "EXTERNAL":
-    #         x = 1000.0 / (self.exp_time + self.dead_time)
-    #     else:
-    #         x = 1000.0 / self.exp_time
-    #     self.fps_entry.setText("{:.02f}".format(x))
 
     @property
     def fps(self):
@@ -540,7 +560,7 @@ class CameraControlsGroup(QGroupBox):
             x = float(self.fps_entry.text())
         except ValueError:
             warning_message("{:}".format(
-                "Exp. time must be a positive number. Setting FPS based on exp. time"))
+                "FPS a positive number. Setting FPS based on exp. time"))
             self.relate_fps_to_exptime()
         if x < 0:
             error_message("{:}".format("FPS must be positive"))
@@ -548,21 +568,31 @@ class CameraControlsGroup(QGroupBox):
         if self.camera_model_label.text() == 'PCO Dimax' and (x < 25):
             error_message("{:}".format("Dimax FPS must be greater than 25"))
             self.all_cam_params_correct = False
-        if self.camera_model_label.text() == 'PCO Edge' and (x > 100):
-            error_message("{:}".format("PCO Edge max FPS is 100"))
-            self.all_cam_params_correct = False
-        if not (1.0/self.exp_time <= x): #because of round of errors
-            warning_message("FPS cannot exceed 1/exp.time; setting fps=1/exp.time")
+        # if self.camera_model_label.text() == 'PCO Edge' and (x > 100):
+        #     error_message("{:}".format("PCO Edge max FPS is 100"))
+        #     self.all_cam_params_correct = False
+        if int(x) > int(1000.0/self.exp_time): #because of round of errors
+            warning_message("FPS [Hz] cannot exceed 1/exp.time[s]; setting fps=1/exp.time")
             self.relate_fps_to_exptime()
         return x
 
     @property
     def dead_time(self):
         try:
-            return float(self.delay_entry.text())
+            x = float(self.delay_entry.text())
         except ValueError:
             warning_message("{:}".format(
                 "Dead time must be a non-negative number"))
+            x = 0
+            self.delay_entry.setText('0')
+            self.all_cam_params_correct = False
+        if x < 0:
+            warning_message("{:}".format(
+                "Dead time must be a non-negative number"))
+            x = 0
+            self.delay_entry.setText('0')
+            self.all_cam_params_correct = False
+        return x
 
     @property
     def roi_height(self):
@@ -665,6 +695,13 @@ class CameraControlsGroup(QGroupBox):
         except ValueError:
             return None
 
+    @property
+    def pix_rate(self):
+        try:
+            return int(self.camera.sensor_pixelrates.currentText())*1e6
+        except:
+            warning_message('Can not get read-out rate')
+
     def extcamera_switched_func(self):
         if self.ttl_scan.isChecked():
             self.live_on_button.setEnabled(False)
@@ -693,6 +730,61 @@ class LivePreviewThread(QThread):
         while self.thread_running:
             if self.live_on:
                 self.viewer.show(self.camera.grab())
+                time.sleep(0.05)
+            else:
+                time.sleep(1)
+
+
+class ReadoutThread(QThread):
+    readout_over_signal = pyqtSignal(bool)
+    def __init__(self, camera):
+        super(ReadoutThread, self).__init__()
+        self.camera = camera
+        self.thread_running = True
+        self.readout_on = False
+        self.last_dir = '/data'
+        self.abort_transfer = False
+        self.frames_grabbed_so_far = 0
+        self.filename = None
+        atexit.register(self.stop)
+
+    def stop(self):
+        self.thread_running = False
+        self.wait()
+
+    def run(self):
+        while self.thread_running:
+            if self.readout_on:
+                # f, fext = self.qfd.getSaveFileName(
+                #     None, 'Select dir and enter prefix', self.last_dir, "Image Files (*.tif)")
+                # if f == self.last_dir:
+                #     f += "/im-seq-00"
+                # self.last_dir = os.path.dirname(f)
+                self.frames_grabbed_so_far = 0
+                tmp = time.time()
+                self.abort_transfer = False
+
+                self.camera.uca.start_readout()
+                wrtr = TiffWriter(self.filename, bytes_per_file=2 ** 37)
+                while not self.abort_transfer:
+                    try:
+                        wrtr.write(self.camera.grab())
+                        # fname = f + "{:>04d}".format(self.frames_grabbed_so_far)+'.tif'
+                        # write_tiff(fname, self.camera.grab())
+                        self.frames_grabbed_so_far += 1
+                    except CameraError:
+                        # No more frames
+                        self.abort_transfer = True
+                self.camera.uca.stop_readout()
+                wrtr.close()
+                self.readout_over_signal.emit(True)
+                info_message("Saved {0} images in {1} sec".
+                             format(self.frames_grabbed_so_far, int(time.time() - tmp)))
+                # Must be signals
+                # self.save_lv_sequence_button.setEnabled(False)
+                # self.abort_transfer_button.setEnabled(False)
+                # self.viewer.show(self.camera.grab())
+                self.readout_on = False
                 time.sleep(0.05)
             else:
                 time.sleep(1)

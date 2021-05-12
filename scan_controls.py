@@ -49,7 +49,8 @@ class ScanControlsGroup(QGroupBox):
         self.outer_loop_label.setText("Outer loop")
         self.outer_loop_motor = QComboBox()
         self.outer_loop_flats_0 = QCheckBox("Before")
-        self.outer_loop_flats_0.setEnabled(False)
+        self.outer_loop_flats_0.setChecked(False)
+        #self.outer_loop_flats_0.setEnabled(False)
         self.outer_loop_start_entry = QLineEdit()
         self.outer_loop_steps_entry = QLineEdit()
         #self.outer_loop_steps_entry.setText("0")
@@ -57,7 +58,8 @@ class ScanControlsGroup(QGroupBox):
         self.outer_loop_endpoint = QCheckBox("Include")
         self.outer_loop_endpoint.setChecked(True)
         self.outer_loop_flats_1 = QCheckBox("After")
-        self.outer_loop_flats_1.setEnabled(False)
+        self.outer_loop_flats_1.setChecked(False)
+        #self.outer_loop_flats_1.setEnabled(False)
         self.outer_loop_continuous = QCheckBox("On-the-fly")
         self.outer_loop_continuous.setChecked(False)
         self.outer_loop_continuous.setEnabled(False)
@@ -83,6 +85,9 @@ class ScanControlsGroup(QGroupBox):
         self.ttl_scan = QCheckBox("TTL scan")
         self.ttl_scan.setChecked(False)
 
+        #signals
+        self.outer_loop_flats_0.stateChanged.connect(self.constrain_flats_before)
+        self.outer_loop_flats_1.stateChanged.connect(self.constrain_flats_after)
         self.set_layout()
 
     def set_layout(self):
@@ -132,6 +137,20 @@ class ScanControlsGroup(QGroupBox):
             layout.setColumnStretch(column, 1)
 
         self.setLayout(layout)
+
+    def constrain_flats_before(self):
+        if self.outer_loop_flats_0.isChecked():
+            self.inner_loop_flats_0.setChecked(False)
+            self.inner_loop_flats_0.setEnabled(False)
+        else:
+            self.inner_loop_flats_0.setEnabled(True)
+
+    def constrain_flats_after(self):
+        if self.outer_loop_flats_1.isChecked():
+            self.inner_loop_flats_1.setChecked(False)
+            self.inner_loop_flats_1.setEnabled(False)
+        else:
+            self.inner_loop_flats_1.setEnabled(True)
 
     # INNER LOOP
     @property
@@ -220,5 +239,13 @@ class ScanControlsGroup(QGroupBox):
     @property
     def ffc_after(self):
         return self.inner_loop_flats_1.isChecked()
+
+    @property
+    def ffc_before_outer(self):
+        return self.outer_loop_flats_0.isChecked()
+
+    @property
+    def ffc_after_outer(self):
+        return self.outer_loop_flats_1.isChecked()
 
 

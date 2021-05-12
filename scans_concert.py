@@ -77,7 +77,7 @@ class ConcertScanThread(QThread):
             error_message("Can not set acquire mode")
         try:
             self.camera.exposure_time = exp_time * q.msec
-            self.camera.frame_rate = fps * q.hertz
+            #self.camera.frame_rate = fps * q.hertz
             self.camera.buffered = buf
             self.camera.num_buffers = bufnum
             self.camera.roi_x0 = x0 * q.pixels
@@ -159,16 +159,15 @@ class ACQsetup(object):
         # softr
         self.tomo_softr = Acquisition("tomo", self.take_tomo_softr)
         # auto
-        # self.tomo_dimax_acq = Acquisition('tomo', self.take_async_tomo2)
-        self.tomo_dimax_acq = Acquisition(
-            "tomo", self.tomo_on_the_fly_seq_readout_Dimax
+        self.tomo_auto_dimax = Acquisition(
+            "tomo", self.take_tomo_auto_Dimax
         )
         # external
-        self.tomo_pso_acq = Acquisition("tomo", self.take_pso_tomo)
-        self.tomo_pso_acq_buf = Acquisition("tomo", self.take_pso_tomo_buf)
+        #self.tomo_pso_acq = Acquisition("tomo", self.take_pso_tomo)
+        self.tomo_ext_buf = Acquisition("tomo", self.take_tomo_ext_buf)
         # tests of sync with top-up inj cycles
         self.rec_seq_with_inj_sync = Acquisition("seq", self.test_rec_seq_with_sync)
-        # pulses only
+        # pulses only to external camera
         self.ttl_acq = Acquisition("ttl", self.take_ttl_tomo)
 
         self.exp = None
@@ -299,14 +298,13 @@ class ACQsetup(object):
             LOG.error(exp)
             info_message("Something is wrong in final in tomo_softr")
 
-    def take_pso_tomo(self):
+    def take_tomo_ext_buf(self):
         """A generator which yields projections. Use triggers generated using PSO function from stage."""
         LOG.info("start PSO triggered scan")
         start = self.motor.position
         try:
             if self.camera.state == "recording":
                 self.camera.stop_recording()
-            self.ffcsetup.open_shutter()
             self.motor["stepvelocity"].set(
                 self.motor.calc_vel(
                     self.nsteps, self.exp_time + self.dead_time, self.range
@@ -324,6 +322,7 @@ class ACQsetup(object):
                 )
             )
             self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
+            self.ffcsetup.open_shutter()
         except Exception as exp:
             LOG.error(exp)
             error_message("Something is wrong in preparations for PSO scan")
@@ -347,7 +346,7 @@ class ACQsetup(object):
             error_message("Problem in PSO scan")
         try:
             self.camera.stop_recording()
-            self.ffcsetup.close_shutter()
+            self.ffcsetup.close_shutter() #would be good to close the shutter as soon as rotaion is over
             LOG.debug("change velocity")
             self.motor.wait_until_stop(timeout=0.5 * q.sec)
             self.motor["stepvelocity"].set(self.motor.base_vel).join()
@@ -359,36 +358,8 @@ class ACQsetup(object):
             self.motor["position"].set(start).join()
         except Exception as exp:
             LOG.error(exp)
-            error_message("Something is wrong in final for PSO scan")
+            error_message("Something is wrong in the ending of PSO scan")
 
-    take_pso_tomo_buf = take_pso_tomo
-
-    # def take_pso_tomo_buf(self):
-    #     LOG.debug("start PSO (buffer)")
-    #     """A generator which yields projections. Use triggers generated using PSO function from stage. Use buffer."""
-    #     try:
-    #         self.ffcsetup.open_shutter()
-    #         self.motor.stepvelocity = self.motor.calc_vel(
-    #             self.nsteps, self.exp_time + self.dead_time, self.range)
-    #         self.motor.stepangle = float(self.range) / float(self.nsteps) * q.deg
-    #         self.motor.LENGTH = (self.range + 5*float(self.range) /
-    #                              float(self.nsteps)) * q.deg
-    #         LOG.debug("Velocity: {}, Step: {}, Range: {}".format(
-    #             self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
-    #         self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
-    #         self.camera.start_recording()
-    #         self.motor.PSO_multi(False).join()
-    #         self.camera.stop_recording()
-    #         self.ffcsetup.close_shutter()
-    #         time.sleep(1)
-    #         self.camera.start_readout()
-    #         for i in range(self.nsteps):
-    #             yield self.camera.grab()
-    #         self.camera.stop_readout()
-    #         self.camera.start_recording()
-    #     except Exception as exp:
-    #         LOG.error(exp)
-    #         error_message("Problem in PSO_buf scan")
 
     # Asynchronous
     def take_async_tomo2(self):
@@ -411,7 +382,7 @@ class ACQsetup(object):
         try:
             self.motor["velocity"].set(velocity).join()
             LOG.debug("constant velocity: {}".format(self.motor._is_velocity_stable()))
-            if read_scan:
+            if read_scan: # won't work must be done in a separate thread
                 with self.camera.recording():
                     time.sleep(0.01)
                     for i in range(self.nsteps):
@@ -444,7 +415,7 @@ class ACQsetup(object):
             LOG.error(exp)
             error_message("Something is wrong in final for async scan")
 
-    def tomo_on_the_fly_seq_readout_Dimax(self):
+    def take_tomo_auto_Dimax(self):
         """A generator which yields projections. """
         LOG.info("start on_the_fly_seq_readout_Dimax scan")
         read_scan = False
@@ -536,16 +507,8 @@ class ACQsetup(object):
     def stop_camera(self):
         self.camera.stop_recording()
 
-        # Q - if I stop recording can I continue to read-out?
+        # Q - if I stop recording can I continue to read-out? A - No
 
-        # with self.camera.recording():
-        #     time.sleep((self.nsteps / self.camera.frame_rate) * 1.05)
-        # self.ffcsetup.close_shutter()
-        # self.motor["velocity"].set(0.0 * q.deg / q.sec).result()
-        # self.camera.uca.start_readout()
-        # for i in range(self.nsteps):
-        #     yield self.camera.grab()
-        # self.camera.uca.stop_readout()
 
     # external camera control
     # Camera is completely external and this is only moving stages and sending triggers

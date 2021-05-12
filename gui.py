@@ -207,7 +207,7 @@ class GUI(QDialog):
         # options:
         if self.camera_controls_group.trigger_entry.currentText() == 'SOFTWARE':
             self.scan_controls_group.inner_loop_continuous.setChecked(False)
-        if self.camera_controls_group.trigger_entry.currentText() == 'EXTERNAL'\
+        if self.camera_controls_group.trig_mode == 'EXTERNAL'\
             and self.camera_controls_group.camera_model_label == 'PCO Edge':
                 tmp = self.camera_controls_group.buffered_entry.findText("YES")
                 self.camera_controls_group.buffered_entry.setCurrentIndex(tmp)
@@ -239,7 +239,15 @@ class GUI(QDialog):
         self.ring_status_group.sync_daq_inj.stateChanged.connect(self.enable_sync_daq_ring)
 
 
+    def ena_disa_all(self, val=True):
+        self.motor_control_group.setEnabled(val)
+        self.camera_controls_group.setEnabled(val)
+        self.ffc_controls_group.setEnabled(val)
+        self.file_writer_group.setEnabled(val)
+        self.ring_status_group.setEnabled(val)
+
     def start(self):
+        self.ena_disa_all(False)
         self.number_of_scans = 1 # we expect to make at least one scan
         self.start_button.setEnabled(False)
         self.abort_button.setEnabled(True)
@@ -265,7 +273,6 @@ class GUI(QDialog):
                 self.motors[self.scan_controls_group.outer_motor]['position'].\
                     set(self.outer_region[0]*self.outer_unit).join()
                 self.continue_outer_scan()
-            # self.number_of_scans = self.scan_controls_group.outer_steps
         else:
             self.total_experiment_time = time.time()
             self.doscan()
@@ -284,9 +291,9 @@ class GUI(QDialog):
         self.concert_scan.start_scan()
 
     def end_of_scan(self):
-        # in the end of scan one outer loop step is made if necessary
+        # in the end of scan next outer loop step is made if applicable
         self.number_of_scans -= 1
-        if self.number_of_scans:
+        if self.number_of_scans > 0:
             if self.scan_controls_group.outer_motor == 'Timer [sec]':
                 self.scan_controls_group.setTitle("Experiment is running; next scan will start soon")
                 time.sleep(self.outer_region[1] - self.outer_region[0])
@@ -299,12 +306,21 @@ class GUI(QDialog):
                     set(self.outer_region[tmp]*self.outer_unit).join()
             self.doscan()
         # This section runs only if scan was finished normally, but not aborted
+        # return motors to starting position
+        if self.scan_controls_group.inner_motor != 'Timer [sec]':
+            self.motors[self.scan_controls_group.inner_motor]['position']. \
+                set(self.scan_controls_group.inner_start * self.concert_scan.acq_setup.units).join()
+        if self.scan_controls_group.outer_steps > 0 and \
+                self.scan_controls_group.outer_motor != 'Timer [sec]':
+            self.motors[self.scan_controls_group.outer_motor]['position']. \
+                set(self.outer_region[0] * self.outer_unit).join()
+        # End of section
         self.scan_controls_group.setTitle(
             "Scan controls. Status: scans were finished without errors. \
             Total acquisition time {:} seconds".format(int(time.time() - self.total_experiment_time)))
-        # End of section
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
+        self.ena_disa_all(True)
 
     def set_scan_params(self):
         '''To be called before Experiment.run
@@ -315,7 +331,8 @@ class GUI(QDialog):
         # since reference to libuca object was getting lost and camera is passed
         # though a signal, its parameters are changed by means of a function rather
         # then directly setting them from GUI
-        if not self.camera_controls_group.ttl_scan.isChecked():
+        if not self.camera_controls_group.ttl_scan.isChecked() and \
+                    self.camera_controls_group.camera_model_label.text() != 'Dummy camera':
             self.concert_scan.set_camera_params(self.camera_controls_group.buffered,
                                                 self.camera_controls_group.buffnum,
                                                 self.camera_controls_group.exp_time,
@@ -346,7 +363,8 @@ class GUI(QDialog):
         else:
             self.concert_scan.ffc_setup.shutter = self.shutter
         # SET FFC parameters
-        if self.scan_controls_group.ffc_before or self.scan_controls_group.ffc_after:
+        if self.scan_controls_group.ffc_before or self.scan_controls_group.ffc_after or \
+                self.scan_controls_group.ffc_before_outer or self.scan_controls_group.ffc_after_outer:
             try:
                 self.concert_scan.ffc_setup.flat_motor = self.motors[self.ffc_controls_group.flat_motor]
             except:
@@ -358,16 +376,18 @@ class GUI(QDialog):
         # POPULATE THE LIST OF ACQUISITIONS
         acquisitions = []
         # ffc before
-        if self.scan_controls_group.ffc_before:
+        if self.scan_controls_group.ffc_before or \
+                (self.scan_controls_group.ffc_before_outer and \
+                    self.number_of_scans == self.scan_controls_group.outer_steps):
             acquisitions.append(self.concert_scan.acq_setup.flats_softr)
             if self.ffc_controls_group.num_darks > 0:
                 acquisitions.append(self.concert_scan.acq_setup.darks_softr)
         # projections
         if self.camera_controls_group.trig_mode == "EXTERNAL":
-            if self.camera_controls_group.buffered:
-                acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq_buf)
-            else:
-                acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq)
+            #if self.camera_controls_group.buffered:
+            #    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq_buf)
+            #else:
+            acquisitions.append(self.concert_scan.acq_setup.tomo_ext_buf)
         elif self.camera_controls_group.trig_mode == "AUTO": #make option avaliable only when connected to DIMAX
             # velocitymax = tomo_max_speed(self.setup.camera.roi_width,
             #                           self.setup.camera.frame_rate)
@@ -377,11 +397,14 @@ class GUI(QDialog):
             #     warning_message("Rotation speed is too large for this sensor width. \
             #                     Reduce fps or increase exposure time \
             #                     to avoid blurring.")
-            acquisitions.append(self.concert_scan.acq_setup.tomo_dimax_acq)
+            acquisitions.append(self.concert_scan.acq_setup.tomo_auto_dimax)
+            # there must be auto scan to PCO Edge CLHS with libuca buffer
         else: #trig_mode is SOFTWARE and rotation is step-wise
             acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
         # ffc after
-        if self.scan_controls_group.ffc_after:
+        if self.scan_controls_group.ffc_after or \
+                (self.scan_controls_group.ffc_after_outer and \
+                    self.number_of_scans == 1):
             acquisitions.append(self.concert_scan.acq_setup.flats2_softr)
 
         # special case when ttl scan is used
@@ -391,8 +414,12 @@ class GUI(QDialog):
 
         # CREATE NEW WALKER
         if self.file_writer_group.isChecked():
+            bpf = 0
+            if self.file_writer_group.bigtiff:
+                bpf = 2**37
             self.concert_scan.walker = DirectoryWalker(root=self.file_writer_group.root_dir,
                                                        dsetname=self.file_writer_group.dsetname)
+                                                       #bytes_per_file=bpf)
         else:
             # if writer is disabled we do not need walker as well
             self.concert_scan.walker = None
@@ -415,6 +442,7 @@ class GUI(QDialog):
 
     def abort(self):
         self.number_of_scans = 0
+        self.take_ffc_after = False
         self.concert_scan.abort_scan()
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
@@ -430,6 +458,7 @@ class GUI(QDialog):
         self.motor_control_group.close_shutter_func()
         self.scan_controls_group.setTitle(
             "Scan controls. Status: scan was aborted by user")
+        self.ena_disa_all(True)
 
     def return_to_start(self):
         self.motors[self.scan_controls_group.inner_motor]['position']. \

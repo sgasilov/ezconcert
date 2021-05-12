@@ -34,6 +34,9 @@ class FileWriterGroup(QGroupBox):
 
         self.separate_scans_checkbox = QCheckBox("Separate scans")
         self.separate_scans_checkbox.setChecked(True)
+
+        self.bigtiff_checkbox = QCheckBox("Use bigtiff containers")
+        self.bigtiff_checkbox.setChecked(False)
         self.set_layout()
 
     def set_layout(self):
@@ -44,7 +47,7 @@ class FileWriterGroup(QGroupBox):
 
         layout.addWidget(self.ctset_fmt_label, 1, 0)
         layout.addWidget(self.ctset_fmt_entry, 1, 1)
-        layout.addWidget(self.blank_label, 1, 2)
+        layout.addWidget(self.bigtiff_checkbox, 1, 2)
         layout.addWidget(self.separate_scans_checkbox, 1, 3)
         layout.addWidget(self.blank_label, 1, 4)
         layout.addWidget(self.dsetname_label, 1, 5)
@@ -91,3 +94,7 @@ class FileWriterGroup(QGroupBox):
     @property
     def separate_scans(self):
         return self.separate_scans_checkbox.isChecked()
+
+    @property
+    def bigtiff(self):
+        return self.bigtiff_checkbox.isChecked()
