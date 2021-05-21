@@ -1,7 +1,7 @@
 import os
 # PyQT imports
 from PyQt5.QtWidgets import QGroupBox, QDialog, QApplication, QGridLayout
-from PyQt5.QtWidgets import QLabel, QPushButton, QDoubleSpinBox
+from PyQt5.QtWidgets import QLabel, QPushButton, QFileDialog, QHBoxLayout
 # from PyQt5.QtWidgets import QLineEdit, QComboBox, QCheckBox
 from PyQt5.QtCore import QTimer, QEventLoop, QFile, QTextStream
 # GUI groups and objects
@@ -29,6 +29,7 @@ import logging
 import concert
 # Miscellaneous imports
 from numpy import linspace
+import yaml
 import time
 import argparse
 # Dark style
@@ -141,9 +142,8 @@ class GUI(QDialog):
             self.set_viewer_limits)
         self.camera_controls_group.viewer_highlim_entry.editingFinished.connect(
             self.set_viewer_limits)
-        self.camera_controls_group.trigger_entry.currentIndexChanged.connect(self.restrict_params_depending_on_trigger)
         self.scan_controls_group.inner_loop_steps_entry.editingFinished.connect(
-            self.relate_nbuf_to_nproj)
+            self.autoset_n_buffers)
         # populate motors dictionary when physical device is connected
         self.motor_control_group.connect_hor_mot_button.clicked.connect(self.add_mot_hor)
         self.motor_control_group.connect_vert_mot_button.clicked.connect(self.add_mot_vert)
@@ -155,19 +155,35 @@ class GUI(QDialog):
         # self.motor_control_group.connect_vert_motor_func()
         # self.motor_control_group.connect_shutter_func()
 
+        self.QFD = QFileDialog()
+        self.exp_imp_button_grp = QGroupBox(title='Save/load params')
+        self.button_save_params = QPushButton("Export settings and params to file")
+        self.button_load_params = QPushButton("Read settings and params from file")
+        self.button_save_params.clicked.connect(self.dump2yaml)
+        self.button_load_params.clicked.connect(self.load_from_yaml)
+        button_grp_layout = QHBoxLayout()
+        button_grp_layout.addWidget(self.button_save_params)
+        button_grp_layout.addWidget(self.button_load_params)
+        self.exp_imp_button_grp.setLayout(button_grp_layout)
+        self.exp_imp_button_grp.setEnabled(False)
+
         # finally
         self.set_layout()
         self.show()
         LOG.info("Start gui.py")
 
+
+
+
     def set_layout(self):
         main_layout = QGridLayout()
         main_layout.addWidget(self.camera_controls_group)
+        main_layout.addWidget(self.exp_imp_button_grp)
         main_layout.addWidget(self.motor_control_group)
         main_layout.addWidget(self.scan_controls_group)
         main_layout.addWidget(self.ffc_controls_group)
         main_layout.addWidget(self.file_writer_group)
-        main_layout.addWidget(self.reco_settings_group)
+        # main_layout.addWidget(self.reco_settings_group)
         main_layout.addWidget(self.ring_status_group)
         self.setLayout(main_layout)
 
@@ -197,43 +213,20 @@ class GUI(QDialog):
     def add_mot_sh(self):
         self.shutter = self.motor_control_group.shutter
 
-    def restrict_params_depending_on_trigger(self):
-        # select continious or step and shoot scans and
-        # enable/disable buffer.
-        tmp = self.camera_controls_group.buffered_entry.findText("NO")
-        self.camera_controls_group.buffered_entry.setCurrentIndex(tmp)
-        self.camera_controls_group.delay_entry.setEnabled(True)
-        self.scan_controls_group.inner_loop_continuous.setChecked(True)
-        # options:
-        if self.camera_controls_group.trigger_entry.currentText() == 'SOFTWARE':
-            self.scan_controls_group.inner_loop_continuous.setChecked(False)
-        if self.camera_controls_group.trig_mode == 'EXTERNAL'\
-            and self.camera_controls_group.camera_model_label == 'PCO Edge':
-                tmp = self.camera_controls_group.buffered_entry.findText("YES")
-                self.camera_controls_group.buffered_entry.setCurrentIndex(tmp)
-                self.camera_controls_group.n_buffers_entry.setText( \
-                    "{:}".format(self.scan_controls_group.inner_loop_steps_entry.text()))
-        # delays can be used in ext and soft trig in case of slow read-out/data transfer
-        # and to let motor stabilize but they are not used in AUTO scans
-        if self.camera_controls_group.trigger_entry.currentText() == 'AUTO':
-            self.camera_controls_group.delay_entry.setEnabled(False)
-
-
     def enable_sync_daq_ring(self):
         self.concert_scan.acq_setup.top_up_veto_enabled = self.ring_status_group.sync_daq_inj.isChecked()
 
     def send_inj_info_to_acqsetup(self, value):
-        # info_message("{}".format(value))
         self.concert_scan.acq_setup.top_up_veto_state = value
 
     def on_camera_connected(self, camera):
         self.concert_scan = ConcertScanThread(self.viewer, camera)
         self.concert_scan.scan_finished_signal.connect(self.end_of_scan)
         self.concert_scan.start()
-        # self.camera = camera
         self.scan_controls_group.setEnabled(True)
         self.ffc_controls_group.setEnabled(True)
         self.file_writer_group.setEnabled(True)
+        self.exp_imp_button_grp.setEnabled(True)
         self.ring_status_group.status_monitor.i0_state_changed_signal2.connect(
             self.send_inj_info_to_acqsetup)
         self.ring_status_group.sync_daq_inj.stateChanged.connect(self.enable_sync_daq_ring)
@@ -245,14 +238,19 @@ class GUI(QDialog):
         self.ffc_controls_group.setEnabled(val)
         self.file_writer_group.setEnabled(val)
         self.ring_status_group.setEnabled(val)
+        self.exp_imp_button_grp.setEnabled(val)
+
+
 
     def start(self):
+        LOG.info("Experiment started")
         self.ena_disa_all(False)
         self.number_of_scans = 1 # we expect to make at least one scan
         self.start_button.setEnabled(False)
         self.abort_button.setEnabled(True)
         self.return_button.setEnabled(False)
         self.scan_controls_group.setTitle("Scan controls. Status: Experiment is running")
+        self.move_inner_mot2starting_point()
         if self.scan_controls_group.outer_steps > 0:
             # if outer scan parameters are set compute positions of the outer motor
             if self.scan_controls_group.outer_loop_endpoint:
@@ -322,25 +320,24 @@ class GUI(QDialog):
         self.abort_button.setEnabled(False)
         self.ena_disa_all(True)
 
+    def move_inner_mot2starting_point(self):
+        # insert check large discrepancy
+        LOG.info("Moving inner motor to starting point")
+        self.motors[self.scan_controls_group.inner_motor]
+        if self.scan_controls_group.inner_motor == 'CT stage [deg]':
+            self.motors[self.scan_controls_group.inner_motor]["stepvelocity"]\
+                .set(5.0 * q.deg / q.sec).join()
+            time.sleep(0.2)
+            self.motors[self.scan_controls_group.inner_motor]["position"].\
+                set(self.scan_controls_group.inner_start * q.deg).join()
+
     def set_scan_params(self):
         '''To be called before Experiment.run
            We create new instance of Concert Experiment and set all
            parameters required for correct data acquisition'''
-
         # SET CAMERA PARAMETER
-        # since reference to libuca object was getting lost and camera is passed
-        # though a signal, its parameters are changed by means of a function rather
-        # then directly setting them from GUI
-        if not self.camera_controls_group.ttl_scan.isChecked() and \
-                    self.camera_controls_group.camera_model_label.text() != 'Dummy camera':
-            self.concert_scan.set_camera_params(self.camera_controls_group.buffered,
-                                                self.camera_controls_group.buffnum,
-                                                self.camera_controls_group.exp_time,
-                                                self.camera_controls_group.fps,
-                                                self.camera_controls_group.roi_x0,
-                                                self.camera_controls_group.roi_width,
-                                                self.camera_controls_group.roi_y0,
-                                                self.camera_controls_group.roi_height)
+        if not self.camera_controls_group.ttl_scan.isChecked():
+            self.camera_controls_group.set_camera_params()
         # SET ACQUISITION PARAMETERS
         # Times as floating point numbers [msec] to compute the CT stage motion
         self.concert_scan.acq_setup.dead_time = self.camera_controls_group.dead_time
@@ -384,21 +381,15 @@ class GUI(QDialog):
                 acquisitions.append(self.concert_scan.acq_setup.darks_softr)
         # projections
         if self.camera_controls_group.trig_mode == "EXTERNAL":
-            #if self.camera_controls_group.buffered:
-            #    acquisitions.append(self.concert_scan.acq_setup.tomo_pso_acq_buf)
-            #else:
-            acquisitions.append(self.concert_scan.acq_setup.tomo_ext_buf)
+            if self.camera_controls_group.camera_model_label.text() == "PCO Dimax":
+                acquisitions.append(self.concert_scan.acq_setup.tomo_ext_dimax)
+            elif self.camera_controls_group.camera_model_label.text() == "PCO Edge":
+                acquisitions.append(self.concert_scan.acq_setup.tomo_ext)
         elif self.camera_controls_group.trig_mode == "AUTO": #make option avaliable only when connected to DIMAX
-            # velocitymax = tomo_max_speed(self.setup.camera.roi_width,
-            #                           self.setup.camera.frame_rate)
-            # velocity = self.scan_controls_group.inner_range * q.deg / (self.scan_controls_group.inner_loop_steps_entry
-            #                           / self.camera_controls_group.fps)
-            # if velocity > velocitymax:
-            #     warning_message("Rotation speed is too large for this sensor width. \
-            #                     Reduce fps or increase exposure time \
-            #                     to avoid blurring.")
-            acquisitions.append(self.concert_scan.acq_setup.tomo_auto_dimax)
-            # there must be auto scan to PCO Edge CLHS with libuca buffer
+            if self.camera_controls_group.camera_model_label.text() == "PCO Dimax":
+                acquisitions.append(self.concert_scan.acq_setup.tomo_auto_dimax)
+            elif self.camera_controls_group.camera_model_label.text() == "PCO Edge":
+                acquisitions.append(self.concert_scan.acq_setup.tomo_auto)
         else: #trig_mode is SOFTWARE and rotation is step-wise
             acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
         # ffc after
@@ -418,23 +409,17 @@ class GUI(QDialog):
             if self.file_writer_group.bigtiff:
                 bpf = 2**37
             self.concert_scan.walker = DirectoryWalker(root=self.file_writer_group.root_dir,
-                                                       dsetname=self.file_writer_group.dsetname)
-                                                       #bytes_per_file=bpf)
+                                                       dsetname=self.file_writer_group.dsetname,
+                                                       bytes_per_file=bpf)
         else:
             # if writer is disabled we do not need walker as well
             self.concert_scan.walker = None
-
-        # WE MUST DETACH OLD WRITER IF IT EXISTS
-        try:
-            self.concert_scan.cons_writer.detach()
-            self.concert_scan.cons_viewer.detach()
-        except:
-            pass
-        # CREATE NEW INSTANCE OF CONCERT EXPERIMENT
+        # create experiment
         self.concert_scan.create_experiment(acquisitions,
                                             self.file_writer_group.ctsetname,
                                             self.file_writer_group.separate_scans)
-        # FINALLY ATTACH CONSUMERS
+        # ATTACH CONSUMERS
+        # (they will be detached and deleted in the end of each scan inside the Concert Thread)
         if self.file_writer_group.isChecked():
             self.concert_scan.attach_writer()
         self.concert_scan.attach_viewer()
@@ -442,7 +427,6 @@ class GUI(QDialog):
 
     def abort(self):
         self.number_of_scans = 0
-        self.take_ffc_after = False
         self.concert_scan.abort_scan()
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
@@ -479,12 +463,69 @@ class GUI(QDialog):
             [int(self.camera_controls_group.viewer_lowlim_entry.text()),
              int(self.camera_controls_group.viewer_highlim_entry.text())]
 
-    def relate_nbuf_to_nproj(self):
-        if self.camera_controls_group.trigger_entry.currentText() == 'EXTERNAL' or \
-                (self.camera_controls_group.trigger_entry.currentText() == 'AUTO' and\
-                 self.camera_controls_group.buffered):
+    def autoset_n_buffers(self):
+        if self.camera_controls_group.buffered_entry.currentText() == "True" and \
+                (self.self.camera_controls_group.trigger_entry.currentText() == 'EXTERNAL' or \
+                self.camera_controls_group.trigger_entry.currentText() == 'AUTO'):
             self.camera_controls_group.n_buffers_entry.setText(\
                 "{:}".format(self.scan_controls_group.inner_loop_steps_entry.text()))
+
+
+    def validate_velocity(self):
+        velocitymax = tomo_max_speed(self.setup.camera.roi_width,
+                                  self.setup.camera.frame_rate)
+        velocity = self.scan_controls_group.inner_range * q.deg / (self.scan_controls_group.inner_loop_steps_entry
+                                  / self.camera_controls_group.fps)
+        if velocity > velocitymax:
+            warning_message("Rotation speed is too large for this sensor width. \
+                            Reduce fps or increase exposure time \
+                            to avoid blurring.")
+
+
+    def dump2yaml(self):
+
+        f, fext = self.QFD.getSaveFileName(
+            self, 'Select file', self.file_writer_group.root_dir, "YAML files (*.yaml)")
+        if f == '':
+            return
+
+        params ={"Camera":
+                    {'Model': self.camera_controls_group.camera_model_label.text(),
+                   'Trigger': self.camera_controls_group.trigger_entry.currentText()},\
+                 "Outer loop":
+                  {'Motor': self.scan_controls_group.outer_loop_motor.currentText()},
+                 "Writer":
+                  {'Data dir': self.file_writer_group.root_dir_entry.text()}}
+
+        def my_unicode_repr(data):
+            return self.represent_str(data.encode('utf-8'))
+
+        yaml.representer.Representer.add_representer(unicode, my_unicode_repr)
+
+        with open(f+'.yaml', 'w') as f:
+            yaml.safe_dump(params, f, allow_unicode=True, default_flow_style=False)
+
+    def load_from_yaml(self):
+        fname, _ = QFileDialog.getOpenFileName(self, "Select yaml file with BMITgui params",
+                                               self.file_writer_group.root_dir,
+                                               "Python Files (*.yaml)")
+
+        with open(fname) as f:
+            p = yaml.load(f, Loader=yaml.FullLoader)
+
+        if p['Camera']['Model'] != self.camera_controls_group.camera_model_label.text():
+            error_message('Param file is for different camera')
+            return
+
+        try: ####### CAMERA  #######
+            tmp = self.camera_controls_group.trigger_entry.findText(p['Camera']['Trigger'])
+            self.camera_controls_group.trigger_entry.setCurrentIndex(tmp)
+        except:
+            warning_message('Cannot set all camera parameters correctly')
+
+        ###### FILE WRITER ########
+        self.file_writer_group.root_dir_entry.setText(p['Writer']['Data dir'])
+
 
 
 if __name__ == '__main__':

@@ -16,6 +16,7 @@ from matplotlib import pyplot as plt
 from concert.devices.cameras.base import CameraError
 from concert.storage import write_tiff
 from concert.writers import TiffWriter
+from time import sleep
 import os
 
 class CameraControlsGroup(QGroupBox):
@@ -100,8 +101,7 @@ class CameraControlsGroup(QGroupBox):
         self.delay_label = QLabel()
         self.delay_label.setText("Dead time [msec]")
         self.delay_entry = QLineEdit()
-        self.delay_entry.setText("0")
-        self.delay_entry.setEnabled(False)
+        self.delay_entry.setText("10")
         self.delay_units = QLabel()
         self.delay_units.setText("msec")
 
@@ -109,7 +109,7 @@ class CameraControlsGroup(QGroupBox):
         self.viewer_lowlim_label = QLabel()
         self.viewer_lowlim_label.setText("Viewer low limit")
         self.viewer_lowlim_entry = QLineEdit()
-        self.viewer_lowlim_entry.setText("80")
+        self.viewer_lowlim_entry.setText("20")
         self.viewer_highlim_label = QLabel()
         self.viewer_highlim_label.setText("Viewer high limit")
         self.viewer_highlim_entry = QLineEdit()
@@ -150,12 +150,6 @@ class CameraControlsGroup(QGroupBox):
         self.buffered_entry = QComboBox()
         self.buffered_entry.addItems(["NO", "YES"])
 
-        # BUFFER LOCATION
-        # self.buffer_location_label = QLabel()
-        # self.buffer_location_label.setText("BUFFER LOCATION")
-        # self.buffer_location_entry = QComboBox()
-        # self.buffer_location_entry.addItems(["PC", "Camera"])
-
         # N BUFFERS
         self.n_buffers_label = QLabel()
         self.n_buffers_label.setText("N BUFFERS")
@@ -192,7 +186,7 @@ class CameraControlsGroup(QGroupBox):
 
         # PIXELRATE line 6
         self.sensor_pix_rate_label = QLabel()
-        self.sensor_pix_rate_label.setText("SENSOR PIXEL RATE, MHz")
+        self.sensor_pix_rate_label.setText("SENSOR PIXEL RATE, Hz")
         self.sensor_pix_rate_entry = QComboBox()
 
         # TIMESTAMP
@@ -213,9 +207,23 @@ class CameraControlsGroup(QGroupBox):
         self.exposure_entry.editingFinished.connect(self.relate_fps_to_exptime)
         self.readout_thread.readout_over_signal.connect(self.readout_over_func)
         self.time_stamp.stateChanged.connect(self.set_time_stamp)
+        self.trigger_entry.currentIndexChanged.connect(self.restrict_params_depending_on_trigger)
 
         self.all_cam_params_correct = True
         self.set_layout()
+
+    def constrain_buf_by_trig(self):
+        if self.trigger_entry.currentText() == 'AUTO':
+            tmp = self.buffered_entry.findText("NO")
+            self.buffered_entry.setCurrentIndex(tmp)
+        if self.trigger_entry.currentText() == 'SOFTWARE':
+            tmp = self.buffered_entry.findText("NO")
+            self.buffered_entry.setCurrentIndex(tmp)
+            self.buffered_entry.setEnabled(False)
+        if self.trigger_entry.currentText() == 'EXTERNAL':
+            tmp = self.buffered_entry.findText("YES")
+            self.buffered_entry.setCurrentIndex(tmp)
+            self.buffered_entry.setEnabled(False)
 
     def set_layout(self):
         layout = QGridLayout()
@@ -301,10 +309,10 @@ class CameraControlsGroup(QGroupBox):
         self.connect_to_camera_status.setStyleSheet("color: orange")
 
         try:
-            self.camera = UcaCamera('pcoclhs')
+            self.camera = UcaCamera('pco')
         except:
             try:
-                self.camera = UcaCamera('pcoclhs')
+                self.camera = UcaCamera('pco')
             except:
                 self.on_camera_connect_failure()
 
@@ -340,11 +348,10 @@ class CameraControlsGroup(QGroupBox):
         self.connect_to_camera_status.setText("CONNECTED")
         self.connect_to_camera_status.setStyleSheet("color: green")
         self.connect_to_dummy_camera_button.setEnabled(False)
+        self.connect_to_camera_button.setEnabled(False)
         self.ttl_scan.setEnabled(False)
-        self.buffered_entry.setEnabled(False)
-        self.n_buffers_entry.setEnabled(False)
-        self.camera.timestamp_mode = self.camera.uca.enum_values.timestamp_mode.NONE
         # identify model
+        # Dimax must use internal buffer, 4000 only soft trigger
         if self.camera.sensor_width.magnitude == 2000:
             self.camera_model_label.setText("PCO Dimax")
             self.connect_to_camera_status.setText("CONNECTED to PCO Dimax")
@@ -354,6 +361,10 @@ class CameraControlsGroup(QGroupBox):
             self.camera.storage_mode = self.camera.uca.enum_values.storage_mode.RECORDER
             self.camera.record_mode = self.camera.uca.enum_values.record_mode.RING_BUFFER
             ####
+            tmp = self.buffered_entry.findText("NO")
+            self.buffered_entry.setCurrentIndex(tmp)
+            self.buffered_entry.setEnabled(False)
+            self.n_buffers_entry.setEnabled(False)
         if self.camera.sensor_width.magnitude == 4008:
             self.camera_model_label.setText("PCO 4000")
             self.connect_to_camera_status.setText("CONNECTED to PCO 4000")
@@ -362,13 +373,13 @@ class CameraControlsGroup(QGroupBox):
         if self.camera.sensor_width.magnitude == 2560:
             self.camera_model_label.setText("PCO Edge")
             self.connect_to_camera_status.setText("CONNECTED to PCO Edge")
-            self.buffered_entry.setEnabled(True)
             self.n_buffers_entry.setEnabled(True)
         ####################################
         # Hardcoding automode for now
         ####################################
         if self.camera.acquire_mode != self.camera.uca.enum_values.acquire_mode.AUTO:
             self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
+        self.camera.timestamp_mode = self.camera.uca.enum_values.timestamp_mode.NONE
         # set default values
         self.exposure_entry.setText("{:.02f}".format(
             self.camera.exposure_time.magnitude*1000))
@@ -383,7 +394,9 @@ class CameraControlsGroup(QGroupBox):
         self.roi_y0_entry.setText("{}".format(self.camera.roi_y0.magnitude))
         self.roi_x0_entry.setText("{}".format(self.camera.roi_x0.magnitude))
         self.sensor_pix_rate_entry.addItems(
-            [str(int(i/1e6)) for i in self.camera.sensor_pixelrates])
+            [str(i) for i in self.camera.sensor_pixelrates])
+        tmp = self.sensor_pix_rate_entry.findText(str(self.camera.sensor_pixelrate))
+        self.sensor_pix_rate_entry.setCurrentIndex(tmp)
         #sensor_vertical_binning
         # sensor_horizontal_vertical_binning
         self.live_preview_thread.camera = self.camera
@@ -392,7 +405,11 @@ class CameraControlsGroup(QGroupBox):
         self.live_on_button.setEnabled(True)
         self.live_off_button.setEnabled(True)
         self.save_one_image_button.setEnabled(True)
-
+        #had to add this in order to avoid that signals
+        #coming to early can break the matplotlib window
+        self.live_on_func()
+        sleep(1)
+        self.live_off_func()
 
     def on_camera_connect_failure(self):
         """
@@ -405,25 +422,25 @@ class CameraControlsGroup(QGroupBox):
         self.camera = None
         self.camera_model_label.setText("")
 
-    def live_on_func(self):
-        #info_message("Live mode ON")
-        self.live_on_button.setEnabled(False)
-        self.live_off_button.setEnabled(True)
-        if self.camera.state == "recording":
-            self.camera.stop_recording()
-        self.camera.exposure_time = self.exp_time * q.msec
-        #self.camera.frame_rate = self.fps * q.hertz
+    def set_camera_params(self):
         if self.camera_model_label.text() == 'Dummy camera':
-            pass
+            return -1
+        try:
+            if self.camera.state == 'recording':
+                self.camera.stop_recording()
+            self.camera.exposure_time = self.exp_time * q.msec
+            #self.camera.frame_rate = fps * q.hertz
+            self.camera.buffered = self.buffered
+            if self.camera.buffered:
+                self.camera.num_buffers = self.buffnum*1.1
+            self.set_time_stamp()
+            self.setROI()
+            #self.camera.sensor_pixelrate = self.sensor_pix_rate_entry.currentText()
+        except:
+            error_message("Can not set camera parameters")
+            return 0
         else:
-            if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
-                self.camera.trigger_source = self.camera.trigger_sources.AUTO
-        # it can be buffered!
-        self.camera.buffered = False #self.buffered
-        self.setROI()
-        self.camera.start_recording()
-        self.live_preview_thread.live_on = True
-        self.lv_duration = time.time()
+            return 1
 
     def set_time_stamp(self):
         if self.time_stamp.isChecked():
@@ -439,6 +456,27 @@ class CameraControlsGroup(QGroupBox):
             self.camera.roi_height = self.roi_height * q.pixels
         except:
             error_message("ROI is not correctly defined for the sensor, check multipliers and centering")
+
+    def live_on_func(self):
+        #info_message("Live mode ON")
+        self.live_on_button.setEnabled(False)
+        self.live_off_button.setEnabled(True)
+        if self.camera.state == "recording":
+            self.camera.stop_recording()
+        if self.camera_model_label.text() == 'Dummy camera':
+            pass
+        else:
+            if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
+                self.camera.trigger_source = self.camera.trigger_sources.AUTO
+        # it can be buffered, e.g. libuca ring buffer + edge !
+        # self.camera.buffered = False #self.buffered
+        # self.setROI()
+        # self.camera.exposure_time = self.exp_time * q.msec
+        # #self.camera.frame_rate = self.fps * q.hertz
+        self.set_camera_params()
+        self.camera.start_recording()
+        self.live_preview_thread.live_on = True
+        self.lv_duration = time.time()
 
     def live_off_func(self):
         #info_message("Live mode OFF")
@@ -505,6 +543,7 @@ class CameraControlsGroup(QGroupBox):
                 self.camera.stop_recording()
             self.camera['trigger_source'].stash().join()
             self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+        self.set_camera_params()
         try:
             if self.camera_model_label.text() != 'Dummy camera':
                 with self.camera.recording():
@@ -519,6 +558,20 @@ class CameraControlsGroup(QGroupBox):
             self.save_one_image_button.setEnabled(True)
         if tmp == True:
             self.live_on_func()
+
+    def restrict_params_depending_on_trigger(self):
+        if self.trigger_entry.currentText() == 'SOFTWARE':
+            tmp = self.buffered_entry.findText("NO")
+            self.buffered_entry.setCurrentIndex(tmp)
+            self.buffered_entry.setEnabled(False)
+            self.n_buffers_entry.setEnabled(False)
+        # delays only applicable in case of external trigger
+        if self.trigger_entry.currentText() == 'AUTO' or\
+            self.trigger_entry.currentText() == 'SOFTWARE':
+            self.delay_entry.setEnabled(False)
+        else:
+            self.delay_entry.setEnabled(True)
+
 
 
         # getters/setters
