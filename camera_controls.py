@@ -11,13 +11,20 @@ from message_dialog import info_message, error_message, warning_message
 from concert.devices.cameras.uca import Camera as UcaCamera
 from concert.devices.cameras.dummy import Camera as DummyCamera
 from concert.quantities import q
+from concert.experiments.addons import Consumer, ImageWriter
+from concert.storage import DirectoryWalker
 import os.path as osp
 from matplotlib import pyplot as plt
 from concert.devices.cameras.base import CameraError
 from concert.storage import write_tiff
 from concert.writers import TiffWriter
+from concert.experiments.base import Acquisition, Experiment
 from time import sleep
 import os
+import logging
+from edc import log
+log.log_to_file("camera.log", logging.DEBUG)
+LOG = log.get_module_logger(__name__)
 
 class CameraControlsGroup(QGroupBox):
     """
@@ -38,12 +45,27 @@ class CameraControlsGroup(QGroupBox):
         self.lv_duration = 0.0
         self.frames_in_last_lv_seq = 0
 
+        self.live_on_button_stream2disk = QPushButton("LIVE ON -> STREAM TO DISK")
+        self.live_on_button_stream2disk.clicked.connect(self.live_on_func_stream2disk)
+        self.live_on_button_stream2disk.setEnabled(False)
+        self.live_on_stream_select_file_button = QPushButton("Select directory to save streams")
+        self.live_on_stream_select_file_button.setEnabled(False)
+        self.live_on_stream_select_file_button.clicked.connect(self.live_on_stream2disk_prepare)
+        self.lv_writer = None
+        self.lv_dirwalker = None
+        self.lv_experiment = None
+        self.lv_acquisitions = None
+        self.lv_stream2disk_on = False
+        self.cons_viewer = None
+        self.cons_writer = None
+        self.fname = None
+
         self.live_off_button = QPushButton("LIVE OFF")
         self.live_off_button.setEnabled(False)
         self.live_off_button.clicked.connect(self.live_off_func)
         self.live_off_button.setEnabled(False)
 
-        self.save_lv_sequence_button = QPushButton("SAVE live-view sequence")
+        self.save_lv_sequence_button = QPushButton("SAVE live-view sequence from Dimax")
         self.save_lv_sequence_button.clicked.connect(self.save_lv_seq)
         self.save_lv_sequence_button.setEnabled(False)
         self.frames_grabbed_so_far = 0
@@ -212,6 +234,7 @@ class CameraControlsGroup(QGroupBox):
         self.all_cam_params_correct = True
         self.set_layout()
 
+
     def constrain_buf_by_trig(self):
         if self.trigger_entry.currentText() == 'AUTO':
             tmp = self.buffered_entry.findText("NO")
@@ -228,9 +251,14 @@ class CameraControlsGroup(QGroupBox):
     def set_layout(self):
         layout = QGridLayout()
         # Buttons on top
+        # layout.addWidget(self.live_on_button, 0, 0, 1, 2)
+        # layout.addWidget(self.live_off_button, 0, 2, 1, 2)
         layout.addWidget(self.live_on_button, 0, 0, 1, 2)
-        layout.addWidget(self.live_off_button, 0, 2, 1, 2)
-        layout.addWidget(self.save_one_image_button, 0, 4, 1, 2)
+        layout.addWidget(self.live_off_button, 0, 2)
+        layout.addWidget(self.save_one_image_button, 0, 3)
+        layout.addWidget(self.live_on_button_stream2disk, 0, 4)
+        layout.addWidget(self.live_on_stream_select_file_button, 0, 5)
+
 
         # Left column of controls
         layout.addWidget(self.connect_to_camera_button, 1, 0)
@@ -271,13 +299,13 @@ class CameraControlsGroup(QGroupBox):
         layout.addWidget(self.trigger_label, 4, 4)
         layout.addWidget(self.trigger_entry, 4, 5)
 
-        layout.addWidget(self.acq_mode_label, 5, 4)
-        layout.addWidget(self.acq_mode_entry, 5, 5)
+        # layout.addWidget(self.acq_mode_label, 5, 4)
+        # layout.addWidget(self.acq_mode_entry, 5, 5)
 
-        layout.addWidget(self.sensor_pix_rate_label, 6, 4)
-        layout.addWidget(self.sensor_pix_rate_entry, 6, 5)
+        layout.addWidget(self.sensor_pix_rate_label, 5, 4)
+        layout.addWidget(self.sensor_pix_rate_entry, 5, 5)
 
-        layout.addWidget(self.time_stamp, 7, 4)
+        layout.addWidget(self.time_stamp, 6, 4)
 
         #layout.addWidget(self.lv_session_info, 8, 4, 1, 2)
 
@@ -289,14 +317,14 @@ class CameraControlsGroup(QGroupBox):
         layout.addWidget(self.roi_y0_entry, 5, 1)
         layout.addWidget(self.roi_height_label, 6, 0)
         layout.addWidget(self.roi_height_entry, 6, 1)
-        layout.addWidget(self.sensor_ver_bin_label, 7, 0)
-        layout.addWidget(self.sensor_ver_bin_entry, 7, 1)
+        # layout.addWidget(self.sensor_ver_bin_label, 7, 0)
+        # layout.addWidget(self.sensor_ver_bin_entry, 7, 1)
         layout.addWidget(self.roi_x0_label, 5, 2)
         layout.addWidget(self.roi_x0_entry, 5, 3)
         layout.addWidget(self.roi_width_label, 6, 2)
         layout.addWidget(self.roi_width_entry, 6, 3)
-        layout.addWidget(self.sensor_hor_bin_label, 7, 2)
-        layout.addWidget(self.sensor_hor_bin_entry, 7, 3)
+        # layout.addWidget(self.sensor_hor_bin_label, 7, 2)
+        # layout.addWidget(self.sensor_hor_bin_entry, 7, 3)
 
         self.setLayout(layout)
 
@@ -309,10 +337,10 @@ class CameraControlsGroup(QGroupBox):
         self.connect_to_camera_status.setStyleSheet("color: orange")
 
         try:
-            self.camera = UcaCamera('pco')
+            self.camera = UcaCamera('pcoclhs')
         except:
             try:
-                self.camera = UcaCamera('pco')
+                self.camera = UcaCamera('pcoclhs')
             except:
                 self.on_camera_connect_failure()
 
@@ -374,6 +402,8 @@ class CameraControlsGroup(QGroupBox):
             self.camera_model_label.setText("PCO Edge")
             self.connect_to_camera_status.setText("CONNECTED to PCO Edge")
             self.n_buffers_entry.setEnabled(True)
+            self.live_on_button_stream2disk.setEnabled(True)
+            self.live_on_stream_select_file_button.setEnabled(True)
         ####################################
         # Hardcoding automode for now
         ####################################
@@ -429,13 +459,15 @@ class CameraControlsGroup(QGroupBox):
             if self.camera.state == 'recording':
                 self.camera.stop_recording()
             self.camera.exposure_time = self.exp_time * q.msec
-            #self.camera.frame_rate = fps * q.hertz
+            if self.camera_model_label.text() == "PCO Dimax":
+                self.camera.frame_rate = self.fps * q.hertz
+            else:
+                self.camera.sensor_pixelrate = int(self.sensor_pix_rate_entry.currentText())
             self.camera.buffered = self.buffered
             if self.camera.buffered:
                 self.camera.num_buffers = self.buffnum*1.1
             self.set_time_stamp()
             self.setROI()
-            #self.camera.sensor_pixelrate = self.sensor_pix_rate_entry.currentText()
         except:
             error_message("Can not set camera parameters")
             return 0
@@ -459,8 +491,9 @@ class CameraControlsGroup(QGroupBox):
 
     def live_on_func(self):
         #info_message("Live mode ON")
-        self.live_on_button.setEnabled(False)
-        self.live_off_button.setEnabled(True)
+        # self.live_on_button.setEnabled(False)
+        # self.live_off_button.setEnabled(True)
+        self.ena_disa_buttons(False)
         if self.camera.state == "recording":
             self.camera.stop_recording()
         if self.camera_model_label.text() == 'Dummy camera':
@@ -468,21 +501,53 @@ class CameraControlsGroup(QGroupBox):
         else:
             if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
                 self.camera.trigger_source = self.camera.trigger_sources.AUTO
-        # it can be buffered, e.g. libuca ring buffer + edge !
-        # self.camera.buffered = False #self.buffered
-        # self.setROI()
-        # self.camera.exposure_time = self.exp_time * q.msec
-        # #self.camera.frame_rate = self.fps * q.hertz
         self.set_camera_params()
         self.camera.start_recording()
         self.live_preview_thread.live_on = True
         self.lv_duration = time.time()
 
+
+    def live_on_stream2disk_prepare(self):
+        self.fname, fext = self.QFD.getSaveFileName(
+            self, 'Select directory', self.last_dir, "Image Files (*.tif)")
+        self.lv_dirwalker = DirectoryWalker(root=os.path.dirname(self.fname),
+                                            dsetname="frames_{:>02}.tif",
+                                            bytes_per_file=2**37)
+        self.lv_acquisitions = [Acquisition("Radios", self.acq_lv_stream2disk)]
+        self.lv_experiment = Experiment(
+            acquisitions=self.lv_acquisitions,
+            walker=self.lv_dirwalker,
+            separate_scans=True,
+            name_fmt="live_view_seq_{:>03}")
+        self.cons_writer = ImageWriter(self.lv_acquisitions, self.lv_dirwalker, async=True)
+        self.cons_viewer = Consumer(self.lv_acquisitions, self.viewer)
+
+    def acq_lv_stream2disk(self):
+        LOG.info("Streaming lv sequence to disk")
+        self.ena_disa_buttons(False)
+        if self.camera.state == "recording":
+            self.camera.stop_recording()
+        if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
+            self.camera.trigger_source = self.camera.trigger_sources.AUTO
+        self.set_camera_params()
+        try:
+            self.camera.start_recording()
+            while self.lv_stream2disk_on:
+                yield self.camera.grab()
+        except Exception as exp:
+            LOG.error(exp)
+
+    def live_on_func_stream2disk(self):
+        if self.fname == None:
+            error_message("Select the filename first")
+            return
+        self.lv_stream2disk_on = True
+        self.lv_experiment.run()
+
     def live_off_func(self):
-        #info_message("Live mode OFF")
         self.live_preview_thread.live_on = False
-        self.live_off_button.setEnabled(False)
-        self.live_on_button.setEnabled(True)
+        self.lv_stream2disk_on = False
+        self.ena_disa_buttons(True)
         try:
             self.camera.stop_recording()
         except:
@@ -491,6 +556,8 @@ class CameraControlsGroup(QGroupBox):
             #    error_message("Cannot stop recording")
         self.lv_duration = time.time() - self.lv_duration
         self.frames_in_last_lv_seq = 0.0
+        self.live_off_button.setEnabled(False)
+        self.live_on_button.setEnabled(True)
         if self.camera_model_label.text() == 'PCO Dimax':# or self.buffered:
             self.save_lv_sequence_button.setEnabled(True)
             self.frames_in_last_lv_seq = self.camera.recorded_frames.magnitude
@@ -572,7 +639,11 @@ class CameraControlsGroup(QGroupBox):
         else:
             self.delay_entry.setEnabled(True)
 
-
+    def ena_disa_buttons(self, val):
+        self.live_on_button_stream2disk.setEnabled(val)
+        self.live_on_stream_select_file_button.setEnabled(val)
+        self.live_on_button.setEnabled(val)
+        self.live_off_button.setEnabled(not val)
 
         # getters/setters
     @property

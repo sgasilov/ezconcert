@@ -60,7 +60,7 @@ class ConcertScanThread(QThread):
             name_fmt=ctsetname,
         )
 
-    def attach_writer(self, async=False):
+    def attach_writer(self, async=True):
         self.cons_writer = ImageWriter(self.exp.acquisitions, self.walker, async=async)
 
     def attach_viewer(self):
@@ -302,34 +302,7 @@ class ACQsetup(object):
             info_message("Something is wrong in final in tomo_softr")
 
     def take_tomo_ext(self):
-        """A generator which yields projections. Use triggers generated using PSO function from stage."""
-        LOG.info("start PSO triggered scan")
-        try:
-            if self.camera.state == "recording":
-                self.camera.stop_recording()
-            self.motor["stepvelocity"].set(
-                self.motor.calc_vel(
-                    self.nsteps, self.exp_time + self.dead_time, self.range
-                )
-            ).join()
-            # self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).join()
-            self.motor["stepangle"].set(self.step).join()
-            # can lose steps at the start so go a bit further to ensure full number of steps
-            # remove this if a PSO window is used
-            # self.motor.LENGTH = self.range * q.deg
-            # SG: I added extra 2% of travel to make sure that there is at least one
-            # pulse after the expected number is collected
-            self.motor.LENGTH = self.step * self.nsteps * 1.02
-            LOG.debug(
-                "Velocity: {}, Step: {}, Range: {}".format(
-                    self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH
-                )
-            )
-            self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
-            self.ffcsetup.open_shutter()
-        except Exception as exp:
-            LOG.error(exp)
-            error_message("Something is wrong in preparations for PSO scan")
+        self.prep4ext_trig_scan_with_PSO()
         try:
             self.camera.start_recording()
             sleep(0.01)
@@ -340,48 +313,8 @@ class ACQsetup(object):
             LOG.error(exp)
             error_message("Problem in PSO scan")
         self.camera.stop_recording()
-        try:
-            LOG.debug("change velocity")
-            self.motor.wait_until_stop(timeout=0.5 * q.sec)
-            self.motor["stepvelocity"].set(self.motor.base_vel).join()
-            LOG.debug("return to start")
-            # the motor does not always move but moving a small amount first seems
-            # to result in the movement to the start position
-            self.motor["position"].set(self.motor.position + 0.1).join()
-            time.sleep(0.2)
-            self.motor["position"].set(self.start*self.units).join()
-        except Exception as exp:
-            LOG.error(exp)
-            error_message("Something is wrong in the ending of PSO scan")
-
-    def prep4ext_trig_scan_with_PSO(self):
-        if self.camera.state == "recording":
-            self.camera.stop_recording()
-        if self.camera.trigger_source != self.camera.trigger_sources.EXTERNAL:
-            self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
-        try:
-            self.ffcsetup.open_shutter()
-        except Exception as exp:
-            LOG.error(exp)
-            error_message("Cannot open shutter")
-        try:
-            self.motor["stepvelocity"].set(
-                self.motor.calc_vel(
-                    self.nsteps, self.exp_time + self.dead_time, self.range
-                )
-            ).join()
-            self.motor["stepangle"].set(self.step).join()
-            self.motor.LENGTH = self.step * self.nsteps * 1.02
-            LOG.debug(
-                "Velocity: {}, Step: {}, Range: {}".format(
-                    self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH
-                )
-            )
-        except Exception as exp:
-            LOG.error(exp)
-            tmp="Cannot set parameters of CT stage/PSO for ext trig scan"
-            LOG.error(tmp)
-            error_message(tmp)
+        self.ffcsetup.close_shutter()
+        self.return_ct_stage_to_start(block=True)
 
     def take_tomo_ext_dimax(self):
         """A generator which yields projections. """
@@ -464,7 +397,6 @@ class ACQsetup(object):
         except Exception as exp:
             LOG.error(exp)
             error_message("Cannot open shutter")
-
         if self.camera.buffered:
             self.camera.num_buffers = self.nsteps * 1.5
         self.motor["velocity"].set(velocity).join()
@@ -480,21 +412,36 @@ class ACQsetup(object):
             LOG.exception('Error during data acquisition')
         self.ffcsetup.close_shutter()
         self.motor.stop().join()
+        self.return_ct_stage_to_start(block=True)
+
+    def prep4ext_trig_scan_with_PSO(self):
+        if self.camera.state == "recording":
+            self.camera.stop_recording()
+        if self.camera.trigger_source != self.camera.trigger_sources.EXTERNAL:
+            self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
         try:
-            LOG.debug("change velocity")
-            self.motor["stepvelocity"].set(self.motor.base_vel).join()
-            LOG.debug("return to start")
-            time.sleep(1)
-            # the motor does not always move but moving a small amount first seems
-            # to result in the movement to the start position
-            self.motor["position"].set(self.motor.position + 0.1).join()
-            time.sleep(0.2)
-            self.motor["position"].set(self.start*self.units).join()
+            self.ffcsetup.open_shutter().join()
         except Exception as exp:
             LOG.error(exp)
-            error_message(
-                "can't return CT stage to start position after auto scan"
+            error_message("Cannot open shutter")
+        try:
+            self.motor["stepvelocity"].set(
+                self.motor.calc_vel(
+                    self.nsteps, self.exp_time + self.dead_time, self.range
+                )
+            ).join()
+            self.motor["stepangle"].set(self.step).join()
+            self.motor.LENGTH = self.step * self.nsteps * 1.02
+            LOG.debug(
+                "Velocity: {}, Step: {}, Range: {}".format(
+                    self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH
+                )
             )
+        except Exception as exp:
+            LOG.error(exp)
+            tmp="Cannot set parameters of CT stage/PSO for ext trig scan"
+            LOG.error(tmp)
+            error_message(tmp)
 
     def return_ct_stage_to_start(self, block=True):
         try:
