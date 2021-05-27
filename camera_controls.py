@@ -104,7 +104,7 @@ class CameraControlsGroup(QGroupBox):
         # external camera software switch
         self.ttl_scan = QCheckBox("External camera controls")
         self.ttl_scan.setChecked(False)
-        self.ttl_scan.clicked.connect(self.extcamera_switched_func)
+
 
         # EXPOSURE
         self.exposure_label = QLabel()
@@ -112,12 +112,15 @@ class CameraControlsGroup(QGroupBox):
         self.exposure_entry = QLineEdit()
         self.exposure_units = QLabel()
         self.exposure_units.setText("msec")
-        self.exposure_entry.editingFinished.connect(self.relate_fps_to_exptime)
 
         # FPS
         self.fps_label = QLabel()
         self.fps_label.setText("FRAMES PER SECOND")
         self.fps_entry = QLineEdit()
+
+        self.fps_label_max = QLabel()
+        self.fps_label_max.setText("Max fps, estimate")
+        self.fps_label_max_val = QLabel()
 
         # DELAY
         self.delay_label = QLabel()
@@ -135,7 +138,7 @@ class CameraControlsGroup(QGroupBox):
         self.viewer_highlim_label = QLabel()
         self.viewer_highlim_label.setText("Viewer high limit")
         self.viewer_highlim_entry = QLineEdit()
-        self.viewer_highlim_entry.setText("120")
+        self.viewer_highlim_entry.setText("50")
 
         # ROI
         # y0
@@ -225,8 +228,10 @@ class CameraControlsGroup(QGroupBox):
         self.readout_thread.start()
 
         # signals
-        self.delay_entry.editingFinished.connect(self.relate_fps_to_exptime)
+        self.ttl_scan.clicked.connect(self.extcamera_switched_func)
         self.exposure_entry.editingFinished.connect(self.relate_fps_to_exptime)
+        self.roi_height_entry.editingFinished.connect(self.get_fps_max_estimate)
+        # check that dead time is larger than readout time?
         self.readout_thread.readout_over_signal.connect(self.readout_over_func)
         self.time_stamp.stateChanged.connect(self.set_time_stamp)
         self.trigger_entry.currentIndexChanged.connect(self.restrict_params_depending_on_trigger)
@@ -281,6 +286,8 @@ class CameraControlsGroup(QGroupBox):
 
         layout.addWidget(self.fps_label, 3, 2)
         layout.addWidget(self.fps_entry, 3, 3)
+        layout.addWidget(self.fps_label_max, 4, 2)
+        layout.addWidget(self.fps_label_max_val, 4, 3)
 
         layout.addWidget(self.delay_label, 4, 0)
         layout.addWidget(self.delay_entry, 4, 1)
@@ -337,7 +344,7 @@ class CameraControlsGroup(QGroupBox):
         self.connect_to_camera_status.setStyleSheet("color: orange")
 
         try:
-            self.camera = UcaCamera('pcoclhs')
+            self.camera = UcaCamera('pco')
         except:
             try:
                 self.camera = UcaCamera('pcoclhs')
@@ -440,6 +447,8 @@ class CameraControlsGroup(QGroupBox):
         self.live_on_func()
         sleep(1)
         self.live_off_func()
+        self.restrict_params_depending_on_trigger()
+        self.get_fps_max_estimate()
 
     def on_camera_connect_failure(self):
         """
@@ -627,16 +636,19 @@ class CameraControlsGroup(QGroupBox):
             self.live_on_func()
 
     def restrict_params_depending_on_trigger(self):
+        self.delay_entry.setText('0')
+        self.delay_entry.setEnabled(False)
         if self.trigger_entry.currentText() == 'SOFTWARE':
             tmp = self.buffered_entry.findText("NO")
             self.buffered_entry.setCurrentIndex(tmp)
             self.buffered_entry.setEnabled(False)
             self.n_buffers_entry.setEnabled(False)
         # delays only applicable in case of external trigger
-        if self.trigger_entry.currentText() == 'AUTO' or\
-            self.trigger_entry.currentText() == 'SOFTWARE':
-            self.delay_entry.setEnabled(False)
-        else:
+        if self.trigger_entry.currentText() == 'EXTERNAL':
+            if self.camera_model_label.text() == 'PCO Dimax':
+                self.delay_entry.setText('1')
+            if self.camera_model_label.text() == 'PCO Edge':
+                self.delay_entry.setText('{0:d}'.format(1000/self.get_fps_max_estimate()))
             self.delay_entry.setEnabled(True)
 
     def ena_disa_buttons(self, val):
@@ -662,8 +674,8 @@ class CameraControlsGroup(QGroupBox):
         if self.camera_model_label.text() == 'PCO Dimax' and (x > 40):
             error_message("{:}".format("Max exp. time for Dimax is 40 msec"))
             self.all_cam_params_correct = False
-            x = 39.9
-            self.exposure_entry.setText('39.9')
+            x = 39.9999
+            self.exposure_entry.setText('39.9999')
         if self.camera_model_label.text() == 'PCO Edge' and (x > 2000):
             error_message("{:}".format("Max exp. time for Edge is 2 sec"))
             x = 1999.9
@@ -673,10 +685,25 @@ class CameraControlsGroup(QGroupBox):
 
     def relate_fps_to_exptime(self):
         if self.trig_mode == "EXTERNAL":
-            x = int(1000.0 / (self.exp_time + self.dead_time))
+            if self.camera_model_label.text() == 'PCO Dimax':
+                x = int(1000.0 / self.exp_time)
+            else:
+                x = int(1000.0 / (self.exp_time + self.dead_time))
         else:
             x = int(1000.0 / self.exp_time)
         self.fps_entry.setText("{:.02f}".format(x))
+
+    def get_fps_max_estimate(self):
+        x = 0
+        if self.camera_model_label.text() == 'PCO Dimax':
+            x = 2200 * 2000/self.roi_height
+        if self.camera_model_label.text() == 'PCO Edge':
+            x = 100 * 2160/self.roi_height
+        if self.camera_model_label.text() == 'PCO 4000':
+            x = 4
+        x = int(x)
+        self.fps_label_max_val.setText(str(x))
+        return x
 
     @property
     def fps(self):
@@ -689,15 +716,21 @@ class CameraControlsGroup(QGroupBox):
         if x < 0:
             error_message("{:}".format("FPS must be positive"))
             self.all_cam_params_correct = False
-        if self.camera_model_label.text() == 'PCO Dimax' and (x < 25):
-            error_message("{:}".format("Dimax FPS must be greater than 25"))
-            self.all_cam_params_correct = False
+        if self.camera_model_label.text() == 'PCO Dimax':
+            if x < 25:
+                warning_message("{:}".format("Dimax FPS must be greater than 25"))
+                x = 25
+            if self.trig_mode == "EXTERNAL" and \
+                    int(x) < int(1000.0 / (self.exp_time + self.dead_time)):
+                warning_message("{:}".format("Dimax FPS must be greater than frequency of external triggers"))
+                x = int(1000.0 / self.exp_time)
         # if self.camera_model_label.text() == 'PCO Edge' and (x > 100):
         #     error_message("{:}".format("PCO Edge max FPS is 100"))
         #     self.all_cam_params_correct = False
-        if int(x) > int(1000.0/self.exp_time): #because of round of errors
-            warning_message("FPS [Hz] cannot exceed 1/exp.time[s]; setting fps=1/exp.time")
+        if int(x) < int(1000.0 / (self.exp_time + self.dead_time)): #because of round of errors
+            #warning_message("FPS [Hz] cannot exceed 1/exp.time[s]; setting fps=1/exp.time")
             self.relate_fps_to_exptime()
+        self.fps_entry.setText("{:.02f}".format(x))
         return x
 
     @property
@@ -731,8 +764,13 @@ class CameraControlsGroup(QGroupBox):
                 h = 2000
             self.roi_height_entry.setText(str(h))
             return h
-        else:
-            return h
+        if self.camera_model_label.text() == 'PCO Edge':
+            h = int(h / 2) * 2
+            if h > 2160:
+                h = 2160
+            self.roi_y0_entry.setText(str(1080 - int(h / 2)))
+            self.roi_height_entry.setText(str(h))
+        return h
 
     @property
     def roi_y0(self):
