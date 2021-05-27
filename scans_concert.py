@@ -68,25 +68,18 @@ class ConcertScanThread(QThread):
 
     def set_camera_params(self, buf, bufnum, exp_time, fps, x0, width, y0, height):
         try:
-            if (self.camera.acquire_mode is not None) and (
-                self.camera.acquire_mode
-                != self.camera.uca.enum_values.acquire_mode.AUTO
-            ):
-                self.camera.acquire_mode = self.camera.uca.enum_values.acquire_mode.AUTO
-        except:
-            error_message("Can not set acquire mode")
-        try:
             self.camera.exposure_time = exp_time * q.msec
-            self.camera.frame_rate = fps * q.hertz
+            #self.camera.frame_rate = fps * q.hertz
             self.camera.buffered = buf
-            self.camera.num_buffers = bufnum
+            if self.camera.buffered:
+                self.camera.num_buffers = bufnum*1.1
             self.camera.roi_x0 = x0 * q.pixels
             self.camera.roi_y0 = y0 * q.pixels
             self.camera.roi_width = width * q.pixels
             self.camera.roi_height = height * q.pixels
         except:
             error_message("Can not set camera parameters")
-            # self.abort_scan()
+            self.scan_finished_signal.emit()
 
     def stop(self):
         self.thread_running = False
@@ -105,6 +98,10 @@ class ConcertScanThread(QThread):
         if self.running_experiment is not None:
             try:
                 if self.running_experiment.done():
+                    self.cons_writer.detach()
+                    self.cons_viewer.detach()
+                    del self.cons_writer
+                    del self.cons_viewer
                     self.scan_finished_signal.emit()
                     self.running_experiment = None
             except:
@@ -116,6 +113,11 @@ class ConcertScanThread(QThread):
     def abort_scan(self):
         try:
             self.exp.abort()
+            self.cons_writer.detach()
+            self.cons_viewer.detach()
+            del self.cons_writer
+            del self.cons_viewer
+            del self.walker
             self.running_experiment = None
         except:
             pass
@@ -159,16 +161,16 @@ class ACQsetup(object):
         # softr
         self.tomo_softr = Acquisition("tomo", self.take_tomo_softr)
         # auto
-        # self.tomo_dimax_acq = Acquisition('tomo', self.take_async_tomo2)
-        self.tomo_dimax_acq = Acquisition(
-            "tomo", self.tomo_on_the_fly_seq_readout_Dimax
-        )
+        self.tomo_auto_dimax = Acquisition("tomo", self.take_tomo_auto_dimax)
+        self.tomo_auto = Acquisition("tomo", self.take_tomo_auto)
+        # self.tomo_auto_dimax_pro = \
+        #     Acquisition("tomo", self.take_tomo_auto_Dimax_buffered_parallel)
         # external
-        self.tomo_pso_acq = Acquisition("tomo", self.take_pso_tomo)
-        self.tomo_pso_acq_buf = Acquisition("tomo", self.take_pso_tomo_buf)
+        self.tomo_ext = Acquisition("tomo", self.take_tomo_ext)
+        self.tomo_ext_dimax = Acquisition("tomo", self.take_tomo_ext_dimax)
         # tests of sync with top-up inj cycles
         self.rec_seq_with_inj_sync = Acquisition("seq", self.test_rec_seq_with_sync)
-        # pulses only
+        # pulses only to external camera
         self.ttl_acq = Acquisition("ttl", self.take_ttl_tomo)
 
         self.exp = None
@@ -181,6 +183,7 @@ class ACQsetup(object):
         self.ttl_dead_time = None
 
         self.timer = QTimer()
+        self.glob_tmp = 0
 
     # HELPER FUNCTIONS
 
@@ -255,7 +258,6 @@ class ACQsetup(object):
     def take_tomo_softr(self):
         """A generator which yields projections."""
         LOG.info("Start software triggered scan")
-        start = self.motor.position
         try:
             if self.motor.name.startswith("ABRS"):
                 if self.nsteps == 2:
@@ -292,163 +294,68 @@ class ACQsetup(object):
             # maintain unidirectional repeatability
             # self.motor['position'].set(self.start-self.step).join()
             LOG.debug("return to start")
-            self.motor["position"].set(start).join()
+            self.motor["position"].set(self.start).join()
             if self.motor.name.startswith("ABRS"):
                 self.motor["stepvelocity"].set(5.0 * q.deg / q.sec).join()
         except Exception as exp:
             LOG.error(exp)
             info_message("Something is wrong in final in tomo_softr")
 
-    def take_pso_tomo(self):
-        """A generator which yields projections. Use triggers generated using PSO function from stage."""
-        LOG.info("start PSO triggered scan")
-        start = self.motor.position
-        try:
-            if self.camera.state == "recording":
-                self.camera.stop_recording()
-            self.ffcsetup.open_shutter()
-            self.motor["stepvelocity"].set(
-                self.motor.calc_vel(
-                    self.nsteps, self.exp_time + self.dead_time, self.range
-                )
-            ).join()
-            # self.motor['stepangle'].set(float(self.range) / float(self.nsteps) * q.deg).join()
-            self.motor["stepangle"].set(self.step).join()
-            # can lose steps at the start so go a bit further to ensure full number of steps
-            # remove this if a PSO window is used
-            # self.motor.LENGTH = self.range * q.deg
-            self.motor.LENGTH = self.step * self.nsteps
-            LOG.debug(
-                "Velocity: {}, Step: {}, Range: {}".format(
-                    self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH
-                )
-            )
-            self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
-        except Exception as exp:
-            LOG.error(exp)
-            error_message("Something is wrong in preparations for PSO scan")
+    def take_tomo_ext(self):
+        self.prep4ext_trig_scan_with_PSO()
         try:
             self.camera.start_recording()
             sleep(0.01)
             self.motor.PSO_multi(False)
-            # sleep(1)
-            # for i in range(self.nsteps):
-            #     yield self.camera.grab()
-            i = 0
-            while i < self.nsteps:
-                try:
-                    yield self.camera.grab()
-                except:
-                    sleep(0.01)
-                else:
-                    i += 1
+            for i in range(self.nsteps):
+                yield self.camera.grab()
         except Exception as exp:
             LOG.error(exp)
             error_message("Problem in PSO scan")
-        try:
-            self.camera.stop_recording()
-            self.ffcsetup.close_shutter()
-            LOG.debug("change velocity")
-            self.motor.wait_until_stop(timeout=0.5 * q.sec)
-            self.motor["stepvelocity"].set(self.motor.base_vel).join()
-            LOG.debug("return to start")
-            # the motor does not always move but moving a small amount first seems
-            # to result in the movement to the start position
-            self.motor["position"].set(self.motor.position + 0.1).join()
-            time.sleep(0.2)
-            self.motor["position"].set(start).join()
-        except Exception as exp:
-            LOG.error(exp)
-            error_message("Something is wrong in final for PSO scan")
+        self.camera.stop_recording()
+        self.ffcsetup.close_shutter()
+        self.return_ct_stage_to_start(block=True)
 
-    take_pso_tomo_buf = take_pso_tomo
-
-    # def take_pso_tomo_buf(self):
-    #     LOG.debug("start PSO (buffer)")
-    #     """A generator which yields projections. Use triggers generated using PSO function from stage. Use buffer."""
-    #     try:
-    #         self.ffcsetup.open_shutter()
-    #         self.motor.stepvelocity = self.motor.calc_vel(
-    #             self.nsteps, self.exp_time + self.dead_time, self.range)
-    #         self.motor.stepangle = float(self.range) / float(self.nsteps) * q.deg
-    #         self.motor.LENGTH = (self.range + 5*float(self.range) /
-    #                              float(self.nsteps)) * q.deg
-    #         LOG.debug("Velocity: {}, Step: {}, Range: {}".format(
-    #             self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH))
-    #         self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
-    #         self.camera.start_recording()
-    #         self.motor.PSO_multi(False).join()
-    #         self.camera.stop_recording()
-    #         self.ffcsetup.close_shutter()
-    #         time.sleep(1)
-    #         self.camera.start_readout()
-    #         for i in range(self.nsteps):
-    #             yield self.camera.grab()
-    #         self.camera.stop_readout()
-    #         self.camera.start_recording()
-    #     except Exception as exp:
-    #         LOG.error(exp)
-    #         error_message("Problem in PSO_buf scan")
-
-    # Asynchronous
-    def take_async_tomo2(self):
+    def take_tomo_ext_dimax(self):
         """A generator which yields projections. """
-        LOG.info("start async scan")
-        read_scan = False
-        start = self.motor.position
-        velocity = self.motor.calc_vel(
-            self.nsteps, self.exp_time + self.dead_time, self.range
-        )
+        LOG.info("start on_the_fly ext trig Dimax scan")
+        self.prep4ext_trig_scan_with_PSO()
+        #rotation and recording
         try:
-            if self.camera.state == "recording":
-                self.camera.stop_recording()
-            self.ffcsetup.open_shutter()
-            self.camera.trigger_source = self.camera.trigger_sources.AUTO
-            LOG.debug("Velocity: {}, Range: {}".format(velocity, self.motor.LENGTH))
+            self.camera.start_recording()
+            sleep(0.01)
+            self.motor.PSO_multi(False)
+            # while self.motor.state == "moving":
+            #     sleep(0.5)
+            sleep(self.nsteps*(self.exp_time + self.dead_time)*1.1e-3)
+            self.camera.stop_recording()
         except Exception as exp:
             LOG.error(exp)
-            error_message("Problem in setup of async scan")
-        try:
-            self.motor["velocity"].set(velocity).join()
-            LOG.debug("constant velocity: {}".format(self.motor._is_velocity_stable()))
-            if read_scan:
-                with self.camera.recording():
-                    time.sleep(0.01)
-                    for i in range(self.nsteps):
-                        yield self.camera.grab()
-            else:
-                with self.camera.recording():
-                    time.sleep(
-                        (self.nsteps * (self.exp_time + self.dead_time) * 1e-3) * 1.05
-                    )
-                self.ffcsetup.close_shutter()
-                self.motor.stop().join()
-                self.camera.uca.start_readout()
-                for i in range(self.nsteps):
-                    yield self.camera.grab()
-                self.camera.uca.stop_readout()
-        except Exception as exp:
-            LOG.error(exp)
-            error_message("Problem in run of async scan")
-        try:
-            LOG.debug("change velocity")
-            self.motor["stepvelocity"].set(self.motor.base_vel).join()
-            LOG.debug("return to start")
-            time.sleep(1)
-            # the motor does not always move but moving a small amount first seems
-            # to result in the movement to the start position
-            self.motor["position"].set(self.motor.position + 0.1).join()
-            time.sleep(0.2)
-            self.motor["position"].set(start).join()
-        except Exception as exp:
-            LOG.error(exp)
-            error_message("Something is wrong in final for async scan")
+            tmp = "Problem during recording/rotation in PSO scan"
+            LOG.error(tmp)
+            error_message(tmp)
+        # read-out
+        if self.camera.recorded_frames.magnitude < self.nsteps:
+            tmp = "Number of recorded frames {:} less than expected {:}". \
+                format(self.camera.recorded_frames.magnitude, self.nsteps)
+            LOG.error(tmp)
+            error_message(tmp)
+            return
+        self.ffcsetup.close_shutter()
+        self.return_ct_stage_to_start(block=False)
+        self.camera.uca.start_readout()
+        for i in range(self.nsteps):
+            yield self.camera.grab()
+        self.camera.uca.stop_readout()
+        while self.motor.state == "moving":
+            sleep(0.5)
 
-    def tomo_on_the_fly_seq_readout_Dimax(self):
+
+    def take_tomo_auto_dimax(self):
+        # parallel read-out not possible: Dimax mode SEQUENCE:
+        # parallel read out possible: Dimax mode: RECORDER + RING BUFFER:
         """A generator which yields projections. """
         LOG.info("start on_the_fly_seq_readout_Dimax scan")
-        read_scan = False
-        start = self.motor.position
         if self.camera.state == "recording":
             self.camera.stop_recording()
         if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
@@ -463,39 +370,26 @@ class ACQsetup(object):
         LOG.debug("time to sleep for scan: {}".format(sleep_time))
         LOG.debug("Velocity: {}, Range: {}".format(velocity, self.range))
         self.motor["velocity"].set(velocity).join()
-        # parallel read-out not possible: Dimax mode SEQUENCE:
         with self.camera.recording():
             time.sleep(self.nsteps / float(self.camera.frame_rate.magnitude) * 1.05)
         self.ffcsetup.close_shutter()
         self.motor.stop().join()
+        self.return_ct_stage_to_start(block=False)
         self.camera.uca.start_readout()
         for i in range(self.nsteps):
             yield self.camera.grab()
         self.camera.uca.stop_readout()
-        try:
-            LOG.debug("change velocity")
-            self.motor["stepvelocity"].set(self.motor.base_vel).join()
-            LOG.debug("return to start")
-            time.sleep(1)
-            # the motor does not always move but moving a small amount first seems
-            # to result in the movement to the start position
-            self.motor["position"].set(self.motor.position + 0.1).join()
-            time.sleep(0.2)
-            self.motor["position"].set(start).join()
-        except Exception as exp:
-            LOG.error(exp)
-            error_message(
-                "Something is wrong in final for on_the_fly_seq_readout_Dimax scan"
-            )
+        while self.motor.state == "moving":
+            sleep(0.5)
 
-    def tomo_on_the_fly_par_readout_Dimax(self):
-        # parallel read out possible: Dimax mode: RECORDER + RING BUFFER:
+    def take_tomo_auto(self):
         """A generator which yields projections. """
-        LOG.info("start on_the_fly_par_readout_Dimax scan")
-        read_scan = False
-        start = self.motor.position
+        LOG.info("start on_the_fly_par_readout_Edge scan")
+        velocity = self.range * q.deg / (self.nsteps / self.camera.frame_rate)
+        LOG.debug("Velocity: {}, Range: {}".format(velocity, self.range))
         if self.camera.state == "recording":
             self.camera.stop_recording()
+        # increase the number of buffers to avoid overwriting if writing is slow
         if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
             self.camera.trigger_source = self.camera.trigger_sources.AUTO
         try:
@@ -503,15 +397,53 @@ class ACQsetup(object):
         except Exception as exp:
             LOG.error(exp)
             error_message("Cannot open shutter")
-        velocity = self.range * q.deg / (self.nsteps / self.camera.frame_rate)
-        LOG.debug("Velocity: {}, Range: {}".format(velocity, self.range))
+        if self.camera.buffered:
+            self.camera.num_buffers = self.nsteps * 1.5
         self.motor["velocity"].set(velocity).join()
-        # parallel read out possible: Dimax mode: RECORDER + RING BUFFER:
-        self.camera.start_recording()
-        self.timer.singleShot(
-            (self.nsteps / self.camera.frame_rate) * 1050,
-            self.stop_rotation_and_close_shutter,
-        )
+        #time.sleep(1) # what is it for? Must proceed as soon as speed is constant
+        #there must be signal from stage that it covered the 180/360 degrees
+        #and as soon as it happens stage must be stopped and shutter closed
+        #but grab cycle must go on at the same time
+        try:
+            with self.camera.recording():
+                for i in range(self.nsteps):
+                    yield self.camera.grab()
+        except:
+            LOG.exception('Error during data acquisition')
+        self.ffcsetup.close_shutter()
+        self.motor.stop().join()
+        self.return_ct_stage_to_start(block=True)
+
+    def prep4ext_trig_scan_with_PSO(self):
+        if self.camera.state == "recording":
+            self.camera.stop_recording()
+        if self.camera.trigger_source != self.camera.trigger_sources.EXTERNAL:
+            self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
+        try:
+            self.ffcsetup.open_shutter().join()
+        except Exception as exp:
+            LOG.error(exp)
+            error_message("Cannot open shutter")
+        try:
+            self.motor["stepvelocity"].set(
+                self.motor.calc_vel(
+                    self.nsteps, self.exp_time + self.dead_time, self.range
+                )
+            ).join()
+            self.motor["stepangle"].set(self.step).join()
+            self.motor.LENGTH = self.step * self.nsteps * 1.02
+            LOG.debug(
+                "Velocity: {}, Step: {}, Range: {}".format(
+                    self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH
+                )
+            )
+        except Exception as exp:
+            LOG.error(exp)
+            tmp="Cannot set parameters of CT stage/PSO for ext trig scan"
+            LOG.error(tmp)
+            error_message(tmp)
+
+    def return_ct_stage_to_start(self, block=True):
         try:
             LOG.debug("change velocity")
             self.motor["stepvelocity"].set(self.motor.base_vel).join()
@@ -521,31 +453,32 @@ class ACQsetup(object):
             # to result in the movement to the start position
             self.motor["position"].set(self.motor.position + 0.1).join()
             time.sleep(0.2)
-            self.motor["position"].set(start).join()
+            if block:
+                self.motor["position"].set(self.start*self.units).join()
+            else:
+                self.motor["position"].set(self.start * self.units)
         except Exception as exp:
             LOG.error(exp)
             error_message(
-                "Something is wrong in final for on_the_fly_par_readout_Dimax scan"
+                "can't return CT stage to start position after auto scan"
             )
 
-    def stop_rotation_and_close_shutter(self):
-        self.ffcsetup.close_shutter()
-        self.motor["velocity"].set(0 * q.deg / q.sec).result()
-        self.timer.singleShot(60e3, self.stop_camera)
+    #def stop_rotation_and_close_shutter(self):
+        #self.ffcsetup.close_shutter()
+        #self.motor.stop().join()
+        # the motor does not always move but moving a small amount first seems
+        # to result in the movement to the start position
+        # self.motor["stepvelocity"].set(self.motor.base_vel).join()
+        # LOG.debug("return to start")
+        # time.sleep(1)
+        # # the motor does not always move but moving a small amount first seems
+        # # to result in the movement to the start position
+        # self.motor["position"].set(self.motor.position + 0.1).join()
+        # self.motor["position"].set(self.glob_tmp).join()
 
-    def stop_camera(self):
-        self.camera.stop_recording()
 
-        # Q - if I stop recording can I continue to read-out?
+        # Q - if I stop recording can I continue to read-out? A - No
 
-        # with self.camera.recording():
-        #     time.sleep((self.nsteps / self.camera.frame_rate) * 1.05)
-        # self.ffcsetup.close_shutter()
-        # self.motor["velocity"].set(0.0 * q.deg / q.sec).result()
-        # self.camera.uca.start_readout()
-        # for i in range(self.nsteps):
-        #     yield self.camera.grab()
-        # self.camera.uca.stop_readout()
 
     # external camera control
     # Camera is completely external and this is only moving stages and sending triggers
@@ -659,6 +592,18 @@ class ACQsetup(object):
                 self.motor["stepvelocity"].set(5.0 * q.deg / q.sec)
             except Exception as exp:
                 LOG.error("Problem with returning to start position: {}".format(exp))
+
+    def take_tomo_auto_Dimax_buffered_parallel(self):
+        self.camera.storage_mode = self.camera.uca.enum_values.storage_mode.FIFO_BUFFER
+        self.camera.buffered = True
+        self.camera.num_buffers = self.nsteps*2
+        try:
+            with self.camera.recording():
+                sleep(0.01) # prophylactic sleep, recommended by Matthias
+                for i in range(self.nsteps):
+                    yield self.camera.grab()
+        except:
+            LOG.exception('Error during data acquisition')
 
     # test
     def test_rec_seq_with_sync(self):
