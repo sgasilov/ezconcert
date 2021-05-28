@@ -239,13 +239,20 @@ class GUI(QDialog):
 
 
     def start(self):
+        if self.camera_controls_group.live_on or \
+                self.camera_controls_group.lv_stream2disk_on:
+            self.camera_controls_group.live_off_func()
         LOG.info("***** EXPERIMENT STARTED *****")
         self.ena_disa_all(False)
+        time.sleep(0.5)
         self.number_of_scans = 1 # we expect to make at least one scan
         self.start_button.setEnabled(False)
         self.abort_button.setEnabled(True)
         self.return_button.setEnabled(False)
         self.scan_controls_group.setTitle("Scan controls. Status: Experiment is running")
+        self.set_scan_params()
+        if self.scan_controls_group.readout_intheend.isChecked():
+            self.camera_controls_group.live_on_func_ext_trig()
         self.move_inner_mot2starting_point()
         if self.scan_controls_group.outer_steps > 0:
             # if outer scan parameters are set compute positions of the outer motor
@@ -279,12 +286,25 @@ class GUI(QDialog):
 
     def doscan(self):
         LOG.info("STARTING SCAN")
-        self.camera_controls_group.live_off_func()
         # before starting scan we have to create new experiment and update parameters
         # of acquisitions, flat-field correction, camera, consumers, etc based on the user input
-        self.set_scan_params()
+        #self.set_scan_params()
         # start actual Concert experiment in concert scan thread
-        self.concert_scan.start_scan()
+        if self.camera_controls_group.ttl_scan.isChecked() or \
+                    self.scan_controls_group.readout_intheend.isChecked():
+            if self.scan_controls_group.outer_steps > 0 and \
+                    self.number_of_scans == self.scan_controls_group.outer_steps and \
+                        self.scan_controls_group.ffc_before_outer:
+                self.concert_scan.acq_setup.take_ttl_tomo(1)
+            elif self.scan_controls_group.outer_steps > 0 and \
+                    self.number_of_scans == 1 and \
+                        self.scan_controls_group.ffc_after_outer:
+                self.concert_scan.acq_setup.take_ttl_tomo(2)
+            else:
+                self.concert_scan.acq_setup.take_ttl_tomo(0)
+            self.end_of_scan()
+        else:
+            self.concert_scan.start_scan()
 
     def end_of_scan(self):
         # in the end of scan next outer loop step is made if applicable
@@ -305,13 +325,7 @@ class GUI(QDialog):
             self.doscan()
         else:
             # This section runs only if scan was finished normally, not aborted
-            # return motors to starting position
-            if self.scan_controls_group.outer_steps > 0 and \
-                    self.scan_controls_group.outer_motor != 'Timer [sec]':
-                LOG.info("Returning outer motor to starting point")
-                self.motors[self.scan_controls_group.outer_motor]['position']. \
-                    set(self.outer_region[0] * self.outer_unit).join()
-            LOG.info("***** Experiment finished without errors ****")
+            LOG.info("***** EXPERIMENT finished without errors ****")
             # End of section
             self.scan_controls_group.setTitle(
                 "Scan controls. Status: scans were finished without errors. \
@@ -319,6 +333,16 @@ class GUI(QDialog):
             self.start_button.setEnabled(True)
             self.abort_button.setEnabled(False)
             self.ena_disa_all(True)
+            self.concert_scan.detach_and_clean()
+            if self.scan_controls_group.readout_intheend.isChecked():
+                self.camera_controls_group.live_off_func()
+            # return motors to starting position
+            if self.scan_controls_group.outer_steps > 0 and \
+                    self.scan_controls_group.outer_motor != 'Timer [sec]':
+                LOG.info("Returning outer motor to starting point")
+                self.motors[self.scan_controls_group.outer_motor]['position']. \
+                    set(self.outer_region[0] * self.outer_unit)
+
 
     def return_to_start(self):
         if self.scan_controls_group.outer_steps > 0 and \
@@ -387,6 +411,8 @@ class GUI(QDialog):
                 self.concert_scan.ffc_setup.flat_motor = self.motors[self.ffc_controls_group.flat_motor]
             except:
                 info_message("Select flat field motor to acquire flats")
+                self.number_of_scans = 0
+                self.end_of_scan()
             self.concert_scan.ffc_setup.radio_position = self.ffc_controls_group.radio_position * q.mm
             self.concert_scan.ffc_setup.flat_position = self.ffc_controls_group.flat_position * q.mm
             self.concert_scan.acq_setup.num_flats = self.ffc_controls_group.num_flats
@@ -420,9 +446,10 @@ class GUI(QDialog):
             acquisitions.append(self.concert_scan.acq_setup.flats2_softr)
 
         # special case when ttl scan is used
-        if self.camera_controls_group.ttl_scan.isChecked():
-            acquisitions = []
-            acquisitions.append(self.concert_scan.acq_setup.ttl_acq)
+        # if self.camera_controls_group.ttl_scan.isChecked() or \
+        #         self.scan_controls_group.readout_intheend.isChecked():
+        #     acquisitions = []
+        #     acquisitions.append(self.concert_scan.acq_setup.ttl_acq)
 
         # CREATE NEW WALKER
         if self.file_writer_group.isChecked():
@@ -506,6 +533,7 @@ class GUI(QDialog):
         f, fext = self.QFD.getSaveFileName(
             self, 'Select file', self.file_writer_group.root_dir, "YAML files (*.yaml)")
         if f == '':
+            warning_message('Select the file')
             return
 
         params ={"Camera":
@@ -528,6 +556,10 @@ class GUI(QDialog):
         fname, _ = QFileDialog.getOpenFileName(self, "Select yaml file with BMITgui params",
                                                self.file_writer_group.root_dir,
                                                "Python Files (*.yaml)")
+
+        if fname == '':
+            warning_message('Select the file')
+            return
 
         with open(fname) as f:
             p = yaml.load(f, Loader=yaml.FullLoader)
