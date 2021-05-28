@@ -499,9 +499,7 @@ class CameraControlsGroup(QGroupBox):
             error_message("ROI is not correctly defined for the sensor, check multipliers and centering")
 
     def live_on_func(self):
-        #info_message("Live mode ON")
-        # self.live_on_button.setEnabled(False)
-        # self.live_off_button.setEnabled(True)
+        LOG.info("Live view on with auto trigger")
         self.ena_disa_buttons(False)
         if self.camera.state == "recording":
             self.camera.stop_recording()
@@ -515,6 +513,17 @@ class CameraControlsGroup(QGroupBox):
         self.live_preview_thread.live_on = True
         self.lv_duration = time.time()
 
+    def live_on_func_ext_trig(self):
+        LOG.info("Live view on with external trigger")
+        self.ena_disa_buttons(False)
+        if self.camera.state == "recording":
+            self.camera.stop_recording()
+        if self.camera.trigger_source != self.camera.trigger_sources.EXTERNAL:
+            self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
+        self.set_camera_params()
+        self.camera.start_recording()
+        #self.live_preview_thread.live_on = True #not working with external triggers
+        self.lv_duration = time.time()
 
     def live_on_stream2disk_prepare(self):
         self.fname, fext = self.QFD.getSaveFileName(
@@ -554,13 +563,15 @@ class CameraControlsGroup(QGroupBox):
         self.lv_experiment.run()
 
     def live_off_func(self):
+        LOG.error("Live off func called")
         self.live_preview_thread.live_on = False
         self.lv_stream2disk_on = False
         self.ena_disa_buttons(True)
         try:
             self.camera.stop_recording()
-        except:
-            pass
+        except Exception as exp:
+            LOG.error("Cannot stop recording to stop the live view")
+            LOG.error(exp)
             # if self.camera_model_label.text() != 'Dummy camera':
             #    error_message("Cannot stop recording")
         self.lv_duration = time.time() - self.lv_duration
@@ -572,6 +583,7 @@ class CameraControlsGroup(QGroupBox):
             self.frames_in_last_lv_seq = self.camera.recorded_frames.magnitude
             self.setTitle("Camera controls. Status: recorded {0} frames in {1:.03f} seconds".
                                      format(self.frames_in_last_lv_seq,self.lv_duration))
+        LOG.info("Live view stopped")
 
     def save_lv_seq(self):
         self.abort_transfer_button.setEnabled(True)
@@ -655,6 +667,8 @@ class CameraControlsGroup(QGroupBox):
         self.live_on_button_stream2disk.setEnabled(val)
         self.live_on_stream_select_file_button.setEnabled(val)
         self.live_on_button.setEnabled(val)
+        if self.camera_model_label.text() == 'PCO Dimax':
+            self.save_lv_sequence_button.setEnabled(val)
         self.live_off_button.setEnabled(not val)
 
         # getters/setters
