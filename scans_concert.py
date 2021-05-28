@@ -98,10 +98,7 @@ class ConcertScanThread(QThread):
         if self.running_experiment is not None:
             try:
                 if self.running_experiment.done():
-                    self.cons_writer.detach()
-                    self.cons_viewer.detach()
-                    del self.cons_writer
-                    del self.cons_viewer
+                    self.detach_and_clean()
                     self.scan_finished_signal.emit()
                     self.running_experiment = None
             except:
@@ -113,15 +110,18 @@ class ConcertScanThread(QThread):
     def abort_scan(self):
         try:
             self.exp.abort()
-            self.cons_writer.detach()
-            self.cons_viewer.detach()
-            del self.cons_writer
-            del self.cons_viewer
-            del self.walker
+            self.detach_and_clean()
             self.running_experiment = None
         except:
             pass
 
+    def detach_and_clean(self):
+        self.cons_writer.detach()
+        self.cons_viewer.detach()
+        del self.cons_writer
+        del self.cons_viewer
+        del self.walker
+        del self.exp
 
 class ACQsetup(object):
 
@@ -163,8 +163,6 @@ class ACQsetup(object):
         # auto
         self.tomo_auto_dimax = Acquisition("tomo", self.take_tomo_auto_dimax)
         self.tomo_auto = Acquisition("tomo", self.take_tomo_auto)
-        # self.tomo_auto_dimax_pro = \
-        #     Acquisition("tomo", self.take_tomo_auto_Dimax_buffered_parallel)
         # external
         self.tomo_ext = Acquisition("tomo", self.take_tomo_ext)
         self.tomo_ext_dimax = Acquisition("tomo", self.take_tomo_ext_dimax)
@@ -172,6 +170,7 @@ class ACQsetup(object):
         self.rec_seq_with_inj_sync = Acquisition("seq", self.test_rec_seq_with_sync)
         # pulses only to external camera
         self.ttl_acq = Acquisition("ttl", self.take_ttl_tomo)
+        #
 
         self.exp = None
         self.top_up_veto_enabled = False
@@ -257,7 +256,7 @@ class ACQsetup(object):
 
     def take_tomo_softr(self):
         """A generator which yields projections."""
-        LOG.info("Start software triggered scan")
+        LOG.info("Start acquisition: step-and-shoot scan, soft trig")
         try:
             if self.motor.name.startswith("ABRS"):
                 if self.nsteps == 2:
@@ -293,15 +292,16 @@ class ACQsetup(object):
             # return to start position with a small overshoot to
             # maintain unidirectional repeatability
             # self.motor['position'].set(self.start-self.step).join()
-            LOG.debug("return to start")
-            self.motor["position"].set(self.start).join()
-            if self.motor.name.startswith("ABRS"):
-                self.motor["stepvelocity"].set(5.0 * q.deg / q.sec).join()
+            LOG.debug("returning inner motor to starting point")
+            self.motor["position"].set(self.region[0]).join()
+            # if self.motor.name.startswith("ABRS"):
+            #     self.motor["stepvelocity"].set(5.0 * q.deg / q.sec).join()
         except Exception as exp:
             LOG.error(exp)
             info_message("Something is wrong in final in tomo_softr")
 
     def take_tomo_ext(self):
+        LOG.info("Starting acquisition: on-the-fly scan, ext trig, libuca buffer")
         self.prep4ext_trig_scan_with_PSO()
         try:
             self.camera.start_recording()
@@ -318,16 +318,18 @@ class ACQsetup(object):
 
     def take_tomo_ext_dimax(self):
         """A generator which yields projections. """
-        LOG.info("start on_the_fly ext trig Dimax scan")
+        LOG.info("Starting acquisition: on-the-fly scan with Dimax, ext trig, int buffer")
         self.prep4ext_trig_scan_with_PSO()
         #rotation and recording
         try:
             self.camera.start_recording()
             sleep(0.01)
             self.motor.PSO_multi(False)
-            # while self.motor.state == "moving":
-            #     sleep(0.5)
-            sleep(self.nsteps*(self.exp_time + self.dead_time)*1.1e-3)
+            #self.motor["state"].wait("moving", sleep_time=0.1, timeout=10)
+            while self.motor.state == "standby":
+                sleep(0.1)
+            while self.motor.state == "moving":
+                sleep(0.1)
             self.camera.stop_recording()
         except Exception as exp:
             LOG.error(exp)
@@ -350,12 +352,11 @@ class ACQsetup(object):
         while self.motor.state == "moving":
             sleep(0.5)
 
-
     def take_tomo_auto_dimax(self):
         # parallel read-out not possible: Dimax mode SEQUENCE:
         # parallel read out possible: Dimax mode: RECORDER + RING BUFFER:
         """A generator which yields projections. """
-        LOG.info("start on_the_fly_seq_readout_Dimax scan")
+        LOG.info("Starting acquisition: on-the-fly scan with Dimax, auto trig, int buffer")
         if self.camera.state == "recording":
             self.camera.stop_recording()
         if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
@@ -384,7 +385,7 @@ class ACQsetup(object):
 
     def take_tomo_auto(self):
         """A generator which yields projections. """
-        LOG.info("start on_the_fly_par_readout_Edge scan")
+        LOG.info("Starting acquisition: on-the-fly scan, auto trig, parallel readout")
         velocity = self.range * q.deg / (self.nsteps / self.camera.frame_rate)
         LOG.debug("Velocity: {}, Range: {}".format(velocity, self.range))
         if self.camera.state == "recording":
@@ -422,8 +423,8 @@ class ACQsetup(object):
         try:
             self.ffcsetup.open_shutter().join()
         except Exception as exp:
+            LOG.error("Cannot open shutter")
             LOG.error(exp)
-            error_message("Cannot open shutter")
         try:
             self.motor["stepvelocity"].set(
                 self.motor.calc_vel(
@@ -445,13 +446,13 @@ class ACQsetup(object):
 
     def return_ct_stage_to_start(self, block=True):
         try:
+            LOG.debug("returning inner motor to start after acquisition")
             LOG.debug("change velocity")
             self.motor["stepvelocity"].set(self.motor.base_vel).join()
-            LOG.debug("return to start")
             time.sleep(1)
             # the motor does not always move but moving a small amount first seems
             # to result in the movement to the start position
-            self.motor["position"].set(self.motor.position + 0.1).join()
+            self.motor["position"].set(self.motor.position + 0.1*q.deg).join()
             time.sleep(0.2)
             if block:
                 self.motor["position"].set(self.start*self.units).join()
@@ -489,22 +490,22 @@ class ACQsetup(object):
         step_scan = False
         goto_start = True
         total_time = self.exp_time + self.dead_time
-        if total_time < 10.0:
-            mesg = "Time is too short for TTL pulses: {} < 10 ms".format(total_time)
+        if total_time < 1.0:
+            mesg = "Time is too short for TTL pulses: {} < 1 ms".format(total_time)
             error_message(mesg)
             LOG.error(mesg)
             return
         # go to start
-        if goto_start:
-            try:
-                LOG.debug("Go to start")
-                self.motor["stepvelocity"].set(5.0 * q.deg / q.sec).join()
-                # the motor does not always move but moving a small amount first seems
-                # to result in the movement to the start position
-                self.motor["position"].set(self.motor.position + 0.1).join()
-                self.motor["position"].set(self.start * q.deg).join()
-            except Exception as exp:
-                LOG.error("Problem with returning to start position: {}".format(exp))
+        # if goto_start:
+        #     try:
+        #         LOG.debug("Go to start")
+        #         self.motor["stepvelocity"].set(5.0 * q.deg / q.sec).join()
+        #         # the motor does not always move but moving a small amount first seems
+        #         # to result in the movement to the start position
+        #         self.motor["position"].set(self.motor.position + 0.1).join()
+        #         self.motor["position"].set(self.start * q.deg).join()
+        #     except Exception as exp:
+        #         LOG.error("Problem with returning to start position: {}".format(exp))
         # flats before
         LOG.debug("Take flats before.")
         try:
@@ -576,7 +577,7 @@ class ACQsetup(object):
         try:
             if self.flats_after:
                 time.sleep(2.0)
-                self.motor.PSO_ttl(self.num_darks, total_time).join()
+                # self.motor.PSO_ttl(self.num_darks, total_time).join()
                 time.sleep((total_time / 1000.0) * self.num_darks * 1.1)
         except Exception as exp:
             LOG.error("Problem with Dark After: {}".format(exp))
@@ -592,18 +593,6 @@ class ACQsetup(object):
                 self.motor["stepvelocity"].set(5.0 * q.deg / q.sec)
             except Exception as exp:
                 LOG.error("Problem with returning to start position: {}".format(exp))
-
-    def take_tomo_auto_Dimax_buffered_parallel(self):
-        self.camera.storage_mode = self.camera.uca.enum_values.storage_mode.FIFO_BUFFER
-        self.camera.buffered = True
-        self.camera.num_buffers = self.nsteps*2
-        try:
-            with self.camera.recording():
-                sleep(0.01) # prophylactic sleep, recommended by Matthias
-                for i in range(self.nsteps):
-                    yield self.camera.grab()
-        except:
-            LOG.exception('Error during data acquisition')
 
     # test
     def test_rec_seq_with_sync(self):

@@ -131,7 +131,7 @@ class GUI(QDialog):
         self.scan_controls_group.inner_loop_motor.addItem("Timer [sec]")
         self.scan_controls_group.outer_loop_motor.addItem("Timer [sec]")
 
-        # Variable for outer loop
+        # Variables for outer loop
         self.number_of_scans = 1
         self.outer_region = []
         self.outer_step = 0.0
@@ -150,10 +150,10 @@ class GUI(QDialog):
         self.motor_control_group.connect_CT_mot_button.clicked.connect(self.add_mot_CT)
         self.motor_control_group.connect_shutter_button.clicked.connect(self.add_mot_sh)
         # add motors automatically on start
-        # self.motor_control_group.connect_hor_motor_func()
-        # self.motor_control_group.connect_CT_motor_func()
-        # self.motor_control_group.connect_vert_motor_func()
-        # self.motor_control_group.connect_shutter_func()
+        # self.add_mot_CT()
+        # self.add_mot_hor()
+        # self.add_mot_vert()
+        # self.add_mot_sh()
 
         self.QFD = QFileDialog()
         self.exp_imp_button_grp = QGroupBox(title='Save/load params')
@@ -213,11 +213,7 @@ class GUI(QDialog):
     def add_mot_sh(self):
         self.shutter = self.motor_control_group.shutter
 
-    def enable_sync_daq_ring(self):
-        self.concert_scan.acq_setup.top_up_veto_enabled = self.ring_status_group.sync_daq_inj.isChecked()
 
-    def send_inj_info_to_acqsetup(self, value):
-        self.concert_scan.acq_setup.top_up_veto_state = value
 
     def on_camera_connected(self, camera):
         self.concert_scan = ConcertScanThread(self.viewer, camera)
@@ -243,7 +239,7 @@ class GUI(QDialog):
 
 
     def start(self):
-        LOG.info("Experiment started")
+        LOG.info("***** EXPERIMENT STARTED *****")
         self.ena_disa_all(False)
         self.number_of_scans = 1 # we expect to make at least one scan
         self.start_button.setEnabled(False)
@@ -263,9 +259,10 @@ class GUI(QDialog):
                                              self.scan_controls_group.outer_steps, False)
             # and make the first move
             if self.scan_controls_group.outer_motor == 'Timer [sec]':
-                #time.sleep(self.outer_region[0])
+                LOG.info("DELAYING THE START OF THE SCANS")
                 QTimer.singleShot(self.outer_region[0] * 1000, self.continue_outer_scan)
             else:
+                LOG.info("MOVING TO THE OUTER MOTOR STARTING POINT")
                 if self.scan_controls_group.outer_motor == 'CT stage [deg]':
                     self.outer_unit = q.deg # change unit to degrees if outer motor rotates sample
                 self.motors[self.scan_controls_group.outer_motor]['position'].\
@@ -281,6 +278,7 @@ class GUI(QDialog):
         self.doscan()
 
     def doscan(self):
+        LOG.info("STARTING SCAN")
         self.camera_controls_group.live_off_func()
         # before starting scan we have to create new experiment and update parameters
         # of acquisitions, flat-field correction, camera, consumers, etc based on the user input
@@ -293,43 +291,66 @@ class GUI(QDialog):
         self.number_of_scans -= 1
         if self.number_of_scans > 0:
             if self.scan_controls_group.outer_motor == 'Timer [sec]':
+                LOG.info("WAITING FOR THE NEXT SCAN")
                 self.scan_controls_group.setTitle("Experiment is running; next scan will start soon")
                 time.sleep(self.outer_region[1] - self.outer_region[0])
                 self.scan_controls_group.setTitle("Scan is running")
             else:
+                LOG.info("MOVING TO THE NEXT OUTER MOTOR POINT")
                 #get index of the next step
                 tmp = self.scan_controls_group.outer_steps - self.number_of_scans
                 #move motor to the next absolute position in the scan region
                 self.motors[self.scan_controls_group.outer_motor]['position'].\
                     set(self.outer_region[tmp]*self.outer_unit).join()
             self.doscan()
-        # This section runs only if scan was finished normally, but not aborted
-        # return motors to starting position
-        if self.scan_controls_group.inner_motor != 'Timer [sec]':
-            self.motors[self.scan_controls_group.inner_motor]['position']. \
-                set(self.scan_controls_group.inner_start * self.concert_scan.acq_setup.units).join()
+        else:
+            # This section runs only if scan was finished normally, not aborted
+            # return motors to starting position
+            if self.scan_controls_group.outer_steps > 0 and \
+                    self.scan_controls_group.outer_motor != 'Timer [sec]':
+                LOG.info("Returning outer motor to starting point")
+                self.motors[self.scan_controls_group.outer_motor]['position']. \
+                    set(self.outer_region[0] * self.outer_unit).join()
+            LOG.info("***** Experiment finished without errors ****")
+            # End of section
+            self.scan_controls_group.setTitle(
+                "Scan controls. Status: scans were finished without errors. \
+                Total acquisition time {:} seconds".format(int(time.time() - self.total_experiment_time)))
+            self.start_button.setEnabled(True)
+            self.abort_button.setEnabled(False)
+            self.ena_disa_all(True)
+
+    def return_to_start(self):
         if self.scan_controls_group.outer_steps > 0 and \
                 self.scan_controls_group.outer_motor != 'Timer [sec]':
+            LOG.info("Returning outer motor to starting point")
+            # the motor does not always move but moving a small amount first seems
+            # to result in the movement to the start position (edc/concert/pyqt problem)
+            # self.motors[self.scan_controls_group.outer_motor]["position"]. \
+            #     set(self.motors[self.scan_controls_group.outer_motor].position + 0.1).join()
             self.motors[self.scan_controls_group.outer_motor]['position']. \
-                set(self.outer_region[0] * self.outer_unit).join()
-        # End of section
-        self.scan_controls_group.setTitle(
-            "Scan controls. Status: scans were finished without errors. \
-            Total acquisition time {:} seconds".format(int(time.time() - self.total_experiment_time)))
-        self.start_button.setEnabled(True)
-        self.abort_button.setEnabled(False)
-        self.ena_disa_all(True)
+                set(self.outer_region[0] * self.outer_unit)
+        self.move_inner_mot2starting_point()
+        if self.scan_controls_group.outer_motor != 'Timer [sec]' and \
+                self.motors[self.scan_controls_group.outer_motor].state == "moving":
+            time.sleep(0.5)
 
     def move_inner_mot2starting_point(self):
         # insert check large discrepancy
         LOG.info("Moving inner motor to starting point")
-        self.motors[self.scan_controls_group.inner_motor]
         if self.scan_controls_group.inner_motor == 'CT stage [deg]':
             self.motors[self.scan_controls_group.inner_motor]["stepvelocity"]\
                 .set(5.0 * q.deg / q.sec).join()
+            self.motors[self.scan_controls_group.inner_motor]["position"].\
+                set(self.motors[self.scan_controls_group.inner_motor].position + 0.1*q.deg).join()
             time.sleep(0.2)
             self.motors[self.scan_controls_group.inner_motor]["position"].\
                 set(self.scan_controls_group.inner_start * q.deg).join()
+        elif self.scan_controls_group.inner_motor != 'Timer [sec]':
+            self.motors[self.scan_controls_group.inner_motor]["position"].\
+                set(self.scan_controls_group.inner_start * q.mm).join()
+        elif self.scan_controls_group.inner_motor == 'Timer [sec]':
+            time.sleep(self.scan_controls_group.inner_start)
 
     def set_scan_params(self):
         '''To be called before Experiment.run
@@ -444,14 +465,7 @@ class GUI(QDialog):
             "Scan controls. Status: scan was aborted by user")
         self.ena_disa_all(True)
 
-    def return_to_start(self):
-        self.motors[self.scan_controls_group.inner_motor]['position']. \
-            set(self.scan_controls_group.inner_start * self.concert_scan.acq_setup.units)
-        if self.scan_controls_group.outer_steps > 1 and \
-                self.scan_controls_group.outer_motor != 'Timer [sec]':
-            self.motors[self.scan_controls_group.outer_motor]['position']. \
-                set(self.outer_region[0] * self.outer_unit).join()
-        info_message("Returned to start position")
+
 
     # EXECUTION CONTROL
     def check_scan_status(self):
@@ -481,6 +495,11 @@ class GUI(QDialog):
                             Reduce fps or increase exposure time \
                             to avoid blurring.")
 
+    def enable_sync_daq_ring(self):
+        self.concert_scan.acq_setup.top_up_veto_enabled = self.ring_status_group.sync_daq_inj.isChecked()
+
+    def send_inj_info_to_acqsetup(self, value):
+        self.concert_scan.acq_setup.top_up_veto_state = value
 
     def dump2yaml(self):
 

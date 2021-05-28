@@ -43,6 +43,7 @@ class ScanControlsGroup(QGroupBox):
         self.flats1_label.setText("FLATS")
         self.continuous_label = QLabel()
         self.continuous_label.setText("MOTION")
+        self.readout_intheend = QCheckBox("Accumulate frames and readout in the end")
 
         # Outer loop
         self.outer_loop_label = QLabel()
@@ -96,9 +97,7 @@ class ScanControlsGroup(QGroupBox):
         layout.addWidget(self.start_button, 0, 0, 1, 2)
         layout.addWidget(self.abort_button, 0, 2, 1, 2)
         layout.addWidget(self.return_button, 0, 4, 1, 2)
-        # layout.addWidget(self.scan_fps_label, 0, 6)
-        # layout.addWidget(self.ffc_button, 0, 7)
-        # layout.addWidget(self.p180_button, 0, 8)
+        layout.addWidget(self.readout_intheend, 0, 7, 1, 2)
 
         # Top labels
         layout.addWidget(self.motor_label, 1, 1)
