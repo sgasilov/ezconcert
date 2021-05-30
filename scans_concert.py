@@ -452,7 +452,7 @@ class ACQsetup(object):
                 )
             ).join()
             self.motor["stepangle"].set(self.step).join()
-            self.motor.LENGTH = self.step * self.nsteps * 1.05 #overshooting a bit for the sake of stability
+            self.motor.LENGTH = self.step * self.nsteps
             self.log.debug(
                 "Velocity: {}, Step: {}, Range: {}".format(
                     self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH
