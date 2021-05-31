@@ -546,7 +546,7 @@ class MotorsControlsGroup(QGroupBox):
             self.motion_CT.abort()
             self.motion_CT.stop()
         if self.CT_motor is not None:
-            if self.CT_motor.state in ['hard-limit', 'moving']:
+            if self.CT_motor.state in ["hard-limit", "moving"]:
                 self.CT_motor.stop().join()
         if self.motion_vert is not None:
             self.motion_vert.abort()
@@ -560,8 +560,9 @@ class MotorsControlsGroup(QGroupBox):
     def stop_CT_func(self):
         if self.motion_CT is not None:
             self.motion_CT.abort()
+            self.motion_CT.stop()
         if self.CT_motor is not None:
-            if self.CT_motor.state in ['hard-limit', 'moving']:
+            if self.CT_motor.state in ["hard-limit", "moving"]:
                 self.CT_motor.stop().join()
 
 
