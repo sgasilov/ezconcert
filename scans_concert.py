@@ -546,8 +546,8 @@ class ACQsetup(object):
                     self.motor.PSO_ttl(1, total_time)
             else:
                 vel = self.motor.calc_vel(self.nsteps, total_time, self.range)
-                if vel.magnitude > 365.0:
-                    mesg = "Velocity is too high: {} > 365 deg/s".format(vel)
+                if vel.magnitude > 390.0:
+                    mesg = "Velocity is too high: {} > 390 deg/s".format(vel)
                     error_message(mesg)
                     self.log.error(mesg)
                     return

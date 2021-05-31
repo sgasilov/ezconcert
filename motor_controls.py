@@ -130,6 +130,10 @@ class MotorsControlsGroup(QGroupBox):
         self.CT_mot_rel_move = QDoubleSpinBox()
         self.CT_mot_rel_move.setDecimals(3)
         self.CT_mot_rel_move.setRange(-720, 720)
+        self.CT_mot_jog_move = QDoubleSpinBox()
+        self.CT_mot_jog_move.setDecimals(3)
+        self.CT_mot_jog_move.setRange(0, 390)
+        self.CT_mot_jog_move.setValue(5.00)
 
         # Move Buttons
         self.stop_motors_button = QPushButton("STOP ALL")
@@ -156,15 +160,21 @@ class MotorsControlsGroup(QGroupBox):
         self.move_CT_rel_plus = QPushButton("+")
         self.move_CT_rel_plus.setStyleSheet("font: bold")
         self.move_CT_rel_plus.setEnabled(False)
+        self.move_CT_rel_minus = QPushButton("-")
+        self.move_CT_rel_minus.setStyleSheet("font: bold")
+        self.move_CT_rel_minus.setEnabled(False)
+        self.move_CT_jog_plus = QPushButton("JOG +")
+        self.move_CT_jog_plus.setEnabled(False)
+        self.move_CT_jog_minus = QPushButton("JOG -")
+        self.move_CT_jog_minus.setEnabled(False)
         self.move_hor_rel_minus = QPushButton("-")
         self.move_hor_rel_minus.setStyleSheet("font: bold")
         self.move_hor_rel_minus.setEnabled(False)
         self.move_vert_rel_minus = QPushButton("-")
         self.move_vert_rel_minus.setStyleSheet("font: bold")
         self.move_vert_rel_minus.setEnabled(False)
-        self.move_CT_rel_minus = QPushButton("-")
-        self.move_CT_rel_minus.setStyleSheet("font: bold")
-        self.move_CT_rel_minus.setEnabled(False)
+        self.stop_CT_button = QPushButton("Stop")
+        self.stop_CT_button.setEnabled(False)
 
         # signals
         self.move_hor_mot_button.clicked.connect(self.hor_move_func)
@@ -181,6 +191,10 @@ class MotorsControlsGroup(QGroupBox):
         self.move_hor_rel_minus.clicked.connect(self.hor_rel_minus_func)
         self.move_vert_rel_minus.clicked.connect(self.vert_rel_minus_func)
         self.move_CT_rel_minus.clicked.connect(self.CT_rel_minus_func)
+        self.move_CT_jog_plus.clicked.connect(self.CT_jog_plus_func)
+        self.move_CT_jog_minus.clicked.connect(self.CT_jog_minus_func)
+        self.CT_mot_jog_move.valueChanged.connect(self.CT_jog_vel_func)
+        self.stop_CT_button.clicked.connect(self.stop_CT_func)
 
         # decoration
         self.line_vertical = QVSeparationLine()
@@ -233,9 +247,14 @@ class MotorsControlsGroup(QGroupBox):
         layout.addWidget(self.CT_mot_value, 1, 4)
         layout.addWidget(self.move_CT_rel_plus, 3, 5)
         layout.addWidget(self.move_CT_rel_minus, 3, 3)
-        layout.addWidget(self.CT_vel_select, 4, 4)
-        layout.addWidget(self.CT_vel_low_label, 4, 3)
-        layout.addWidget(self.CT_vel_high_label, 4, 5)
+        # layout.addWidget(self.CT_vel_select, 4, 4)
+        # layout.addWidget(self.CT_vel_low_label, 4, 3)
+        # layout.addWidget(self.CT_vel_high_label, 4, 5)
+        layout.addWidget(self.move_CT_jog_minus, 4, 3)
+        layout.addWidget(self.CT_mot_jog_move, 4, 4)
+        layout.addWidget(self.move_CT_jog_plus, 4, 5)
+        layout.addWidget(self.stop_CT_button, 4, 6)
+
         # vertical
         layout.addWidget(self.vert_mot_label, 0, 8, 1, 3)
         layout.addWidget(self.connect_vert_mot_button, 2, 8)
@@ -320,7 +339,10 @@ class MotorsControlsGroup(QGroupBox):
             self.home_CT_mot_button.setEnabled(True)
             self.reset_CT_mot_button.setEnabled(True)
             self.CT_vel_select.setEnabled(True)
-            self.CT_motor.base_vel = 5 * q.deg / q.sec
+            self.move_CT_jog_plus.setEnabled(True)
+            self.move_CT_jog_minus.setEnabled(True)
+            self.stop_CT_button.setEnabled(True)
+            self.CT_motor.base_vel = 5.0 * q.deg / q.sec
             self.CT_mot_monitor = EpicsMonitorFloat(self.CT_motor.RBV)
             self.CT_mot_monitor.i0_state_changed_signal.connect(
                 self.CT_mot_value.setText
@@ -421,6 +443,20 @@ class MotorsControlsGroup(QGroupBox):
             )
             self.motion_CT.start()
 
+    def CT_jog_plus_func(self):
+        """Start CT stage motion in the plus direction."""
+        if self.CT_motor is None:
+            return
+        else:
+            self.CT_motor.velocity = self.CT_motor.base_vel
+
+    def CT_jog_minus_func(self):
+        """Start CT stage motion in the minus direction."""
+        if self.CT_motor is None:
+            return
+        else:
+            self.CT_motor.velocity = self.CT_motor.base_vel * -1.0
+
     def CT_reset_func(self):
         """Reset the stage and move to home."""
         if self.CT_motor is None:
@@ -440,6 +476,13 @@ class MotorsControlsGroup(QGroupBox):
                 self.CT_motor.base_vel = 20 * q.deg / q.sec
             else:
                 self.CT_motor.base_vel = 5 * q.deg / q.sec
+
+    def CT_jog_vel_func(self):
+        """Set base velocity"""
+        if self.CT_motor is None:
+            return
+        else:
+            self.CT_motor.base_vel = self.CT_mot_jog_move.value() * q.deg / q.sec
 
     def hor_move_func(self):
         """Move the horizontal motor to a selected position."""
@@ -501,12 +544,25 @@ class MotorsControlsGroup(QGroupBox):
         # pyqt threads
         if self.motion_CT is not None:
             self.motion_CT.abort()
+            self.motion_CT.stop()
+        if self.CT_motor is not None:
+            if self.CT_motor.state in ['hard-limit', 'moving']:
+                self.CT_motor.stop().join()
         if self.motion_vert is not None:
             self.motion_vert.abort()
+            self.motion_CT.stop()
         if self.motion_hor is not None:
             self.motion_hor.abort()
+            self.motion_CT.stop()
         # concert devices
         device_abort(m for m in self.motors if m is not None)
+
+    def stop_CT_func(self):
+        if self.motion_CT is not None:
+            self.motion_CT.abort()
+        if self.CT_motor is not None:
+            if self.CT_motor.state in ['hard-limit', 'moving']:
+                self.CT_motor.stop().join()
 
 
 class EpicsMonitorFloat(QObject):
