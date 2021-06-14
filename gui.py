@@ -30,7 +30,7 @@ import logging
 import concert
 # Miscellaneous imports
 from numpy import linspace
-# import yaml
+import yaml
 import time
 import argparse
 # Dark style
