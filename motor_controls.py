@@ -16,6 +16,7 @@ from message_dialog import info_message, error_message
 from edc.shutter import CLSShutter
 from edc.motor import CLSLinear, ABRS, SimMotor
 from switch import Switch
+from time import sleep
 
 from concert.devices.base import abort as device_abort
 from concert.quantities import q
@@ -393,7 +394,7 @@ class MotorsControlsGroup(QGroupBox):
         else:
             # self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
             self.CT_motor.stepvelocity = self.CT_motor.base_vel
-            self.motion_CT = MotionThread(self.CT_motor, self.CT_mot_pos_move)
+            self.motion_CT = MotionThread(self.CT_motor, self.CT_mot_pos_move.value())
             self.motion_CT.start()
 
     def CT_rel_plus_func(self):
@@ -404,7 +405,7 @@ class MotorsControlsGroup(QGroupBox):
             # self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
             self.CT_motor.stepvelocity = self.CT_motor.base_vel
             self.motion_CT = MotionThread(
-                self.CT_motor, self.CT_mot_pos_move, self.CT_mot_rel_move, 1
+                self.CT_motor, self.CT_mot_pos_move.value(), self.CT_mot_rel_move.value(), 1
             )
             self.motion_CT.start()
 
@@ -416,7 +417,7 @@ class MotorsControlsGroup(QGroupBox):
             # self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
             self.CT_motor.stepvelocity = self.CT_motor.base_vel
             self.motion_CT = MotionThread(
-                self.CT_motor, self.CT_mot_pos_move, self.CT_mot_rel_move, -1
+                self.CT_motor, self.CT_mot_pos_move.value(), self.CT_mot_rel_move.value(), -1
             )
             self.motion_CT.start()
 
@@ -445,7 +446,7 @@ class MotorsControlsGroup(QGroupBox):
         if self.hor_motor is None:
             return
         else:
-            self.motion_hor = MotionThread(self.hor_motor, self.hor_mot_pos_move)
+            self.motion_hor = MotionThread(self.hor_motor, self.hor_mot_pos_move.value())
             self.motion_hor.start()
 
     def hor_rel_plus_func(self):
@@ -454,7 +455,7 @@ class MotorsControlsGroup(QGroupBox):
             return
         else:
             self.motion_hor = MotionThread(
-                self.hor_motor, self.hor_mot_pos_move, self.hor_mot_rel_move, 1
+                self.hor_motor, self.hor_mot_pos_move.value(), self.hor_mot_rel_move.value(), 1
             )
             self.motion_hor.start()
 
@@ -464,7 +465,7 @@ class MotorsControlsGroup(QGroupBox):
             return
         else:
             self.motion_hor = MotionThread(
-                self.hor_motor, self.hor_mot_pos_move, self.hor_mot_rel_move, -1
+                self.hor_motor, self.hor_mot_pos_move.value(), self.hor_mot_rel_move.value(), -1
             )
             self.motion_hor.start()
 
@@ -473,7 +474,7 @@ class MotorsControlsGroup(QGroupBox):
         if self.vert_motor is None:
             return
         else:
-            self.motion_vert = MotionThread(self.vert_motor, self.vert_mot_pos_move)
+            self.motion_vert = MotionThread(self.vert_motor, self.vert_mot_pos_move.value())
             self.motion_vert.start()
 
     def vert_rel_plus_func(self):
@@ -482,7 +483,7 @@ class MotorsControlsGroup(QGroupBox):
             return
         else:
             self.motion_vert = MotionThread(
-                self.vert_motor, self.vert_mot_pos_move, self.vert_mot_rel_move, 1
+                self.vert_motor, self.vert_mot_pos_move.value(), self.vert_mot_rel_move.value(), 1
             )
             self.motion_vert.start()
 
@@ -492,7 +493,7 @@ class MotorsControlsGroup(QGroupBox):
             return
         else:
             self.motion_vert = MotionThread(
-                self.vert_motor, self.vert_mot_pos_move, self.vert_mot_rel_move, -1
+                self.vert_motor, self.vert_mot_pos_move.value(), self.vert_mot_rel_move.value(), -1
             )
             self.motion_vert.start()
 
@@ -566,7 +567,7 @@ class MotionThread(QThread):
         self.motor = motor
         self.thread_running = True
         atexit.register(self.stop)
-        self.position = position
+        self.position = position # just number not qspinbox
         self.rel_position = rel_position
         self.direction = direction
         self.is_moving = False
@@ -578,26 +579,31 @@ class MotionThread(QThread):
     def run(self):  # .start() calls this function
         while self.thread_running:
             final_pos = self.motor.position
+            self.is_moving = True
             try:
-                if self.rel_position is None:
-                    final_pos = self.position.value() * self.motor.UNITS
+                if not hasattr(self.motor, 'timer'):
+                    if self.rel_position is None:
+                        final_pos = self.position * self.motor.UNITS
+                    else:
+                        final_pos += (
+                            self.rel_position * self.direction * self.motor.UNITS
+                        )
+                    self.motor.position = final_pos
                 else:
-                    final_pos += (
-                        self.rel_position.value() * self.direction * self.motor.UNITS
-                    )
-                self.is_moving = True
-                self.motor.position = final_pos
+                    sleep(self.position)
                 self.is_moving = False
                 self.motion_over_signal.emit(True)
                 self.thread_running = False
             except TransitionNotAllowed:
                 error_message("Stage is moving. Wait until motion has stopped.")
+                self.is_moving = False
                 self.thread_running = False
 
     def abort(self):
         self.is_moving = False
         try:
             self.motor.abort()
+            self.thread_running = False
         except:
             pass
 

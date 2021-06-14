@@ -483,9 +483,9 @@ class CameraControlsGroup(QGroupBox):
             tmp = "Can not set camera parameters"
             LOG.error(tmp)
             error_message(tmp)
-            return 0
+            return True
         else:
-            return 1
+            return False
 
     def set_time_stamp(self):
         if self.time_stamp.isChecked():

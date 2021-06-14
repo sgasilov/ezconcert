@@ -38,8 +38,7 @@ from styles.breeze import styles_breeze
 from edc import log
 concert.require("0.11.0")
 
-# use logging from EDC
-log.log_to_file("ezconcert.log", logging.DEBUG)
+log.log_to_file('concert.log', logging.DEBUG)
 LOG = log.get_module_logger(__name__)
 
 
@@ -63,26 +62,20 @@ class GUI(QDialog):
         super(GUI, self).__init__(*args, **kwargs)
         self.setWindowTitle('BMIT GUI')
 
+        self.log = None
+        self.LOG = None
+
         # CAMERA
         self.camera = None
-
-        # CONCERT OBJECTS
         self.viewer = PyplotImageViewer()
-        # class which manipulates flat-field motor and shutters
-        self.setup = None
-        self.walker = None
-        self.writer = None
-        # class derived from concert.experiment. It has .run() method
-        self.scan = None
-        # future objects returned by the scan
-        self.f = None
-        # timer which checks state of the self. objects
-        self.scan_status_update_timer = QTimer()
-        self.scan_status_update_timer.setInterval(1000)
-        self.scan_status_update_timer.timeout.connect(self.check_scan_status)
 
-        self.total_experiment_time = QTimer()
-        self.last_inner_loop_scan_time = QTimer()
+        # Thread in which concert.experiment will be started
+        self.concert_scan = None
+
+        # logical devices
+        self.motor_inner = None
+        self.motor_outer = None
+        self.motor_flat = None
 
         # EXECUTION CONTROL BUTTONS
         self.start_button = QPushButton("START")
@@ -93,17 +86,6 @@ class GUI(QDialog):
         self.return_button = QPushButton("RETURN")
         self.return_button.clicked.connect(self.return_to_start)
         self.scan_fps_entry = QLabel()
-
-        # PHYSICAL DEVICES
-         # dictionary which holds all connected devices and their labels
-        self.motors = {}
-        # logical devices
-        self.motor_inner = None
-        self.motor_outer = None
-        self.motor_flat = None
-        self.shutter = None
-        self.motion = None
-
 
         # external subgroups to set parameters
         self.motor_control_group = MotorsControlsGroup(
@@ -125,18 +107,36 @@ class GUI(QDialog):
         self.reco_settings_group = RecoSettingsGroup(title="On-the-fly reconstruction")
         self.reco_settings_group.setEnabled(False)
 
-        # THREADS (scan and motors)
-        self.concert_scan = None
+        # MOTORS
+        # dictionary with references to all connected physical devices and their labels
+        self.motors = {}
+        self.shutter = None
+
         # timer is created automatically in motorscontrolgroup constructor
         self.motors["Timer [sec]"] = self.motor_control_group.time_motor
         self.scan_controls_group.inner_loop_motor.addItem("Timer [sec]")
         self.scan_controls_group.outer_loop_motor.addItem("Timer [sec]")
+        # populate motors dictionary when physical device is connected
+        self.motor_control_group.connect_hor_mot_button.clicked.connect(self.add_mot_hor)
+        self.motor_control_group.connect_vert_mot_button.clicked.connect(self.add_mot_vert)
+        self.motor_control_group.connect_CT_mot_button.clicked.connect(self.add_mot_CT)
+        self.motor_control_group.connect_shutter_button.clicked.connect(self.add_mot_sh)
+        # add motors automatically on start
+        # self.motor_control_group.connect_hor_mot_button.animateClick()
+        # self.motor_control_group.connect_vert_mot_button.animateClick()
+        # self.motor_control_group.connect_CT_mot_button.animateClick()
+        # self.motor_control_group.connect_shutter_button.animateClick()
 
         # Variables for outer loop
         self.number_of_scans = 1
         self.outer_region = []
         self.outer_step = 0.0
         self.outer_unit = q.mm
+
+        # various timers
+        self.gui_timer = QTimer()
+        # timer to show total exp time so far
+        self.total_experiment_time = 0
 
         # SIGNALS/CONNECTIONS
         self.camera_controls_group.viewer_lowlim_entry.editingFinished.connect(
@@ -145,26 +145,22 @@ class GUI(QDialog):
             self.set_viewer_limits)
         self.scan_controls_group.inner_loop_steps_entry.editingFinished.connect(
             self.autoset_n_buffers)
-        # populate motors dictionary when physical device is connected
-        self.motor_control_group.connect_hor_mot_button.clicked.connect(self.add_mot_hor)
-        self.motor_control_group.connect_vert_mot_button.clicked.connect(self.add_mot_vert)
-        self.motor_control_group.connect_CT_mot_button.clicked.connect(self.add_mot_CT)
-        self.motor_control_group.connect_shutter_button.clicked.connect(self.add_mot_sh)
-        # add motors automatically on start
-        # self.add_mot_CT()
-        # self.add_mot_hor()
-        # self.add_mot_vert()
-        # self.add_mot_sh()
+        self.scan_controls_group.inner_loop_motor.currentIndexChanged.connect(
+            self.autoset_continious)
 
+        # SAVE/LOAD params group
         self.QFD = QFileDialog()
         self.exp_imp_button_grp = QGroupBox(title='Save/load params')
         self.button_save_params = QPushButton("Export settings and params to file")
         self.button_load_params = QPushButton("Read settings and params from file")
+        self.button_log_file = QPushButton("Select log file")
         self.button_save_params.clicked.connect(self.dump2yaml)
         self.button_load_params.clicked.connect(self.load_from_yaml)
+        self.button_log_file.clicked.connect(self.select_log_file_func)
         button_grp_layout = QHBoxLayout()
         button_grp_layout.addWidget(self.button_save_params)
         button_grp_layout.addWidget(self.button_load_params)
+        #button_grp_layout.addWidget(self.select_log_file_func)
         self.exp_imp_button_grp.setLayout(button_grp_layout)
         self.exp_imp_button_grp.setEnabled(False)
 
@@ -214,8 +210,6 @@ class GUI(QDialog):
     def add_mot_sh(self):
         self.shutter = self.motor_control_group.shutter
 
-
-
     def on_camera_connected(self, camera):
         self.concert_scan = ConcertScanThread(self.viewer, camera)
         self.concert_scan.scan_finished_signal.connect(self.end_of_scan)
@@ -249,15 +243,21 @@ class GUI(QDialog):
                                  self.scan_controls_group.outer_start + self.scan_controls_group.outer_range,
                                  self.scan_controls_group.outer_steps, False)
         elif self.scan_controls_group.outer_steps == 0:
-            self.number_of_scans = 1
-            return [self.motors[self.scan_controls_group.outer_motor].position.magnitude]
+            self.number_of_scans = 1 # won't work for timer
+            if self.scan_controls_group.outer_motor != 'Timer [sec]':
+                return [self.motors[self.scan_controls_group.outer_motor].position.magnitude]
+            else:
+                return 0
         else:
+            error_message("Outer motor start/steps/range entered incorrectly ")
             self.abort()
 
     def start(self):
         if self.camera_controls_group.live_on or \
                 self.camera_controls_group.lv_stream2disk_on:
             self.camera_controls_group.live_off_func()
+        if self.scan_controls_group.inner_loop_continuous:
+            self.validate_velocity()
         LOG.info("***** EXPERIMENT STARTED *****")
         self.ena_disa_all(False)
         time.sleep(0.5)
@@ -270,46 +270,39 @@ class GUI(QDialog):
         self.create_exp()
         if self.scan_controls_group.readout_intheend.isChecked():
             self.camera_controls_group.live_on_func_ext_trig()
-        self.move_inner_mot2starting_point()
         self.outer_region = self.get_outer_motor_grid()
-        #self.move_mot_to_start_and_begin_exp()
-        if self.number_of_scans > 0:
-            # make the first move
-            if self.scan_controls_group.outer_motor == 'Timer [sec]':
-                LOG.info("DELAYING THE START OF THE SCANS")
-                QTimer.singleShot(self.outer_region[0] * 1000, self.continue_outer_scan)
-            else:
-                LOG.info("MOVING TO THE OUTER MOTOR STARTING POINT")
-                if self.scan_controls_group.outer_motor == 'CT stage [deg]':
-                    self.outer_unit = q.deg # change unit to degrees if outer motor rotates sample
-                self.motors[self.scan_controls_group.outer_motor]['position'].\
-                   set(self.outer_region[0]*self.outer_unit).join()
-                self.continue_outer_scan()
-        else:
-            self.total_experiment_time = time.time()
-            self.doscan()
+        self.move_to_start(begin_exp=True)
 
-    def move_to_start(self):
-        # insert check large discrepancy
+    def move_to_start(self, begin_exp=True):
+        # insert check large discrepancy between present position and start position
         LOG.info("Moving inner motor to starting point")
-        if self.scan_controls_group.inner_motor == 'Timer [sec]':
-            time.sleep(self.scan_controls_group.inner_start)
-        else:
-            self.motion = MotionThread(self.motors[self.scan_controls_group.inner_motor],
-                                       self.scan_controls_group.inner_start)
-            self.motion.start()
-            self.motion = MotionThread(self.motors[self.scan_controls_group.outer_motor],
-                                       self.outer_region[0])
-            self.motion.start()
-            self.motion.motion_over_signal.connect(self.continue_outer_scan)
 
-    def continue_outer_scan(self):
-        self.number_of_scans = self.scan_controls_group.outer_steps
+        self.motor_control_group.motion_CT = MotionThread(
+                    self.motors[self.scan_controls_group.inner_motor],
+                    self.scan_controls_group.inner_start)
+        # outer motor - name of the thread doesn't matter,
+        # used one of the fixed internal names which can be aborted if necessary
+        self.motor_control_group.motion_vert = MotionThread(
+                            self.motors[self.scan_controls_group.outer_motor],
+                            self.outer_region[0])
+        if begin_exp:
+            self.motor_control_group.motion_CT.motion_over_signal.connect(self.begin_scans)
+            self.motor_control_group.motion_vert.motion_over_signal.connect(self.begin_scans)
+
+        self.motor_control_group.motion_CT.start()
+        self.motor_control_group.motion_vert.start()
+
+    def begin_scans(self):
+        if self.motor_control_group.motion_CT.is_moving or \
+                    self.motor_control_group.motion_vert.is_moving:
+            return
         self.total_experiment_time = time.time()
         self.doscan()
 
     def doscan(self):
-        LOG.info("STARTING SCAN")
+        tmp = self.scan_controls_group.outer_steps - self.number_of_scans + 1
+        self.scan_controls_group.setTitle("Experiment is running; doing scan {}".format(tmp))
+        LOG.info("STARTING SCAN {:}".format(tmp))
         # before starting scan we have to create new experiment and update parameters
         # of acquisitions, flat-field correction, camera, consumers, etc based on the user input
         self.add_acquisitions_to_exp()
@@ -335,18 +328,19 @@ class GUI(QDialog):
         self.number_of_scans -= 1
         if self.number_of_scans > 0:
             if self.scan_controls_group.outer_motor == 'Timer [sec]':
-                LOG.info("WAITING FOR THE NEXT SCAN")
-                self.scan_controls_group.setTitle("Experiment is running; next scan will start soon")
-                time.sleep(self.outer_region[1] - self.outer_region[0])
-                self.scan_controls_group.setTitle("Scan is running")
+                LOG.info("DELAYING THE NEXT SCAN")
+                self.scan_controls_group.setTitle("Experiment is running; delaying the next scan")
+                self.gui_timer.singleShot((self.outer_region[1] - self.outer_region[0]) * 1000,
+                                  self.doscan)
             else:
                 LOG.info("MOVING TO THE NEXT OUTER MOTOR POINT")
                 #get index of the next step
                 tmp = self.scan_controls_group.outer_steps - self.number_of_scans
                 #move motor to the next absolute position in the scan region
-                self.motors[self.scan_controls_group.outer_motor]['position'].\
-                    set(self.outer_region[tmp]*self.outer_unit).join()
-            self.doscan()
+                self.motor_control_group.motion_vert = MotionThread(
+                    self.motors[self.scan_controls_group.outer_motor],
+                    self.outer_region[tmp])
+                self.motor_control_group.motion_vert.motion_over_signal.connect(self.doscan)
         else: # all scans done, finish the experiment
             # This section runs only if scan was finished normally, not aborted
             LOG.info("***** EXPERIMENT finished without errors ****")
@@ -361,79 +355,46 @@ class GUI(QDialog):
             if self.scan_controls_group.readout_intheend.isChecked():
                 self.camera_controls_group.live_off_func()
             # return motors to starting position
-            if self.scan_controls_group.outer_steps > 0 and \
-                    self.scan_controls_group.outer_motor != 'Timer [sec]':
-                LOG.info("Returning outer motor to starting point")
-                self.motors[self.scan_controls_group.outer_motor]['position']. \
-                    set(self.outer_region[0] * self.outer_unit)
+            self.move_to_start(begin_exp=False)
 
 
     def return_to_start(self):
-        if self.scan_controls_group.outer_steps > 0 and \
-                self.scan_controls_group.outer_motor != 'Timer [sec]':
-            LOG.info("Returning outer motor to starting point")
-            # the motor does not always move but moving a small amount first seems
-            # to result in the movement to the start position (edc/concert/pyqt problem)
-            # self.motors[self.scan_controls_group.outer_motor]["position"]. \
-            #     set(self.motors[self.scan_controls_group.outer_motor].position + 0.1).join()
-            # self.motion = MotionThread(self.motors[self.scan_controls_group.outer_motor],
-            #                            self.outer_region[0])
-            # self.motion.start()
-            self.motors[self.scan_controls_group.outer_motor]['position']. \
-               set(self.outer_region[0] * self.outer_unit)
-        self.move_inner_mot2starting_point()
-        if self.scan_controls_group.outer_motor != 'Timer [sec]' and \
-                self.motors[self.scan_controls_group.outer_motor].state == "moving":
-            time.sleep(0.5)
-
-    def move_inner_mot2starting_point(self):
-        # insert check large discrepancy
-        LOG.info("Moving inner motor to starting point")
-        if self.scan_controls_group.inner_motor == 'Timer [sec]':
-            time.sleep(self.scan_controls_group.inner_start)
-        else:
-            if self.scan_controls_group.inner_motor == 'CT stage [deg]':
-                self.motors[self.scan_controls_group.inner_motor]["stepvelocity"]\
-                    .set(5.0 * q.deg / q.sec).join()
-                self.motors[self.scan_controls_group.inner_motor]["position"].\
-                    set(self.motors[self.scan_controls_group.inner_motor].position + 0.1*q.deg).join()
-                time.sleep(0.2)
-                self.motors[self.scan_controls_group.inner_motor]["position"].\
-                    set(self.scan_controls_group.inner_start * q.deg).join()
-            elif self.scan_controls_group.inner_motor != 'Timer [sec]':
-                self.motors[self.scan_controls_group.inner_motor]["position"].\
-                    set(self.scan_controls_group.inner_start * q.mm).join()
-            elif self.scan_controls_group.inner_motor == 'Timer [sec]':
-                time.sleep(self.scan_controls_group.inner_start)
+        self.move_to_start(begin_exp=False)
 
     def set_scan_params(self):
         LOG.info("Setting scan parameters")
         '''To be called before Experiment.run
            to set all parameters required for correct data acquisition'''
+        problem_with_params = False
         # SET CAMERA PARAMETER
         if not self.camera_controls_group.ttl_scan.isChecked():
-            self.camera_controls_group.set_camera_params()
+            problem_with_params = self.camera_controls_group.set_camera_params()
         # SET ACQUISITION PARAMETERS
-        # Times as floating point numbers [msec] to compute the CT stage motion
-        self.concert_scan.acq_setup.dead_time = self.camera_controls_group.dead_time
-        self.concert_scan.acq_setup.exp_time = self.camera_controls_group.exp_time
-        # Inner motor and scan intervals
-        self.concert_scan.acq_setup.motor = self.motors[self.scan_controls_group.inner_motor]
-        if self.scan_controls_group.inner_motor == 'CT stage [deg]':
-            self.concert_scan.acq_setup.units = q.deg
-        self.concert_scan.acq_setup.cont = self.scan_controls_group.inner_cont
-        self.concert_scan.acq_setup.start = self.scan_controls_group.inner_start
-        self.concert_scan.acq_setup.nsteps = self.scan_controls_group.inner_steps
-        self.concert_scan.acq_setup.range = self.scan_controls_group.inner_range
-        self.concert_scan.acq_setup.endp = self.scan_controls_group.inner_endpoint
-        self.concert_scan.acq_setup.calc_step()
-        self.concert_scan.acq_setup.flats_before = self.scan_controls_group.ffc_before
-        self.concert_scan.acq_setup.flats_after = self.scan_controls_group.ffc_after
-        # SET shutter
-        if self.shutter is None:
-            self.concert_scan.ffc_setup.shutter = DummyShutter()
-        else:
-            self.concert_scan.ffc_setup.shutter = self.shutter
+        try:
+            # Times as floating point numbers [msec] to compute the CT stage motion
+            self.concert_scan.acq_setup.dead_time = self.camera_controls_group.dead_time
+            self.concert_scan.acq_setup.exp_time = self.camera_controls_group.exp_time
+            # Inner motor and scan intervals
+            self.concert_scan.acq_setup.motor = self.motors[self.scan_controls_group.inner_motor]
+            if self.scan_controls_group.inner_motor == 'CT stage [deg]':
+                self.concert_scan.acq_setup.units = q.deg
+            self.concert_scan.acq_setup.cont = self.scan_controls_group.inner_cont
+            self.concert_scan.acq_setup.start = self.scan_controls_group.inner_start
+            self.concert_scan.acq_setup.nsteps = self.scan_controls_group.inner_steps
+            self.concert_scan.acq_setup.range = self.scan_controls_group.inner_range
+            self.concert_scan.acq_setup.endp = self.scan_controls_group.inner_endpoint
+            self.concert_scan.acq_setup.calc_step()
+            self.concert_scan.acq_setup.flats_before = self.scan_controls_group.ffc_before
+            self.concert_scan.acq_setup.flats_after = self.scan_controls_group.ffc_after
+            # SET shutter
+            if self.shutter is None:
+                self.concert_scan.ffc_setup.shutter = DummyShutter()
+            else:
+                self.concert_scan.ffc_setup.shutter = self.shutter
+        except:
+            LOG.error("Scan params defined incorrectly. Aborting")
+            info_message("Select flat field motor and define parameters correctly")
+            problem_with_params = True
         # SET FFC parameters
         if self.scan_controls_group.ffc_before or self.scan_controls_group.ffc_after or \
                 self.scan_controls_group.ffc_before_outer or self.scan_controls_group.ffc_after_outer:
@@ -444,9 +405,12 @@ class GUI(QDialog):
                 self.concert_scan.acq_setup.num_flats = self.ffc_controls_group.num_flats
                 self.concert_scan.acq_setup.num_darks = self.ffc_controls_group.num_darks
             except:
-                info_message("Select flat field motor and define parameters correctly")
-                self.number_of_scans = 0
-                self.end_of_scan()
+                LOG.error("Flat-field params defined incorrectly. Aborting")
+                error_message("Select flat field motor and define parameters correctly")
+                problem_with_params = True
+        if problem_with_params:
+            self.number_of_scans = 0
+            self.end_of_scan()
 
     def create_exp(self):
         LOG.info("creating concert experiment")
@@ -490,8 +454,11 @@ class GUI(QDialog):
                 self.concert_scan.exp.add(self.concert_scan.acq_setup.tomo_auto_dimax)
             elif self.camera_controls_group.camera_model_label.text() == "PCO Edge":
                 self.concert_scan.exp.add(self.concert_scan.acq_setup.tomo_auto)
-        else: #trig_mode is SOFTWARE and rotation is step-wise
-            self.concert_scan.exp.add(self.concert_scan.acq_setup.tomo_softr)
+        else: #trig_mode is SOFTWARE and motion is always step-wise
+            if self.scan_controls_group.inner_motor == "Timer [sec]":
+                self.concert_scan.exp.add(self.concert_scan.acq_setup.radio_timelaps)
+            else:
+                self.concert_scan.exp.add(self.concert_scan.acq_setup.tomo_softr)
         # ffc after
         if self.scan_controls_group.ffc_after or \
                 (self.scan_controls_group.ffc_after_outer and \
@@ -503,58 +470,20 @@ class GUI(QDialog):
             self.concert_scan.attach_writer()
         self.concert_scan.attach_viewer()
 
-        #
-        # # POPULATE THE LIST OF ACQUISITIONS
-        # acquisitions = []
-        # # ffc before
-        # if self.scan_controls_group.ffc_before or \
-        #         (self.scan_controls_group.ffc_before_outer and \
-        #             self.number_of_scans == self.scan_controls_group.outer_steps):
-        #     acquisitions.append(self.concert_scan.acq_setup.flats_softr)
-        #     if self.ffc_controls_group.num_darks > 0:
-        #         acquisitions.append(self.concert_scan.acq_setup.darks_softr)
-        # # projections
-        # if self.camera_controls_group.trig_mode == "EXTERNAL":
-        #     if self.camera_controls_group.camera_model_label.text() == "PCO Dimax":
-        #         acquisitions.append(self.concert_scan.acq_setup.tomo_ext_dimax)
-        #     elif self.camera_controls_group.camera_model_label.text() == "PCO Edge":
-        #         acquisitions.append(self.concert_scan.acq_setup.tomo_ext)
-        # elif self.camera_controls_group.trig_mode == "AUTO": #make option avaliable only when connected to DIMAX
-        #     if self.camera_controls_group.camera_model_label.text() == "PCO Dimax":
-        #         acquisitions.append(self.concert_scan.acq_setup.tomo_auto_dimax)
-        #     elif self.camera_controls_group.camera_model_label.text() == "PCO Edge":
-        #         acquisitions.append(self.concert_scan.acq_setup.tomo_auto)
-        # else: #trig_mode is SOFTWARE and rotation is step-wise
-        #     acquisitions.append(self.concert_scan.acq_setup.tomo_softr)
-        # # ffc after
-        # if self.scan_controls_group.ffc_after or \
-        #         (self.scan_controls_group.ffc_after_outer and \
-        #             self.number_of_scans == 1):
-        #     acquisitions.append(self.concert_scan.acq_setup.flats2_softr)
-
-
-
-
     def abort(self):
         self.number_of_scans = 0
+        self.gui_timer.stop()
         self.concert_scan.abort_scan()
+        self.motor_control_group.stop_motors_func()
+        self.motor_control_group.close_shutter_func()
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
         self.return_button.setEnabled(True)
-        # calls global Concert abort() command
-        # abort concert experiment not necessarily stops motor
-        self.scan_status_update_timer.stop()
         if self.camera_controls_group.camera.state == 'recording':
             self.camera_controls_group.camera.stop_recording()
-        # use motor list to abort
-        # device_abort(m for m in self.motors.values() if m is not None)
-        self.motor_control_group.stop_motors_func()
-        self.motor_control_group.close_shutter_func()
         self.scan_controls_group.setTitle(
             "Scan controls. Status: scan was aborted")
         self.ena_disa_all(True)
-
-
 
     # EXECUTION CONTROL
     def check_scan_status(self):
@@ -573,6 +502,12 @@ class GUI(QDialog):
             self.camera_controls_group.n_buffers_entry.setText(\
                 "{:}".format(self.scan_controls_group.inner_loop_steps_entry.text()))
 
+    def autoset_continious(self):
+        if self.scan_controls_group.inner_loop_motor.currentText() != 'CT stage [deg]':
+            self.scan_controls_group.inner_loop_continuous.setChecked(False)
+        else:
+            self.scan_controls_group.inner_loop_continuous.setChecked(True)
+
 
     def validate_velocity(self):
         velocitymax = tomo_max_speed(self.setup.camera.roi_width,
@@ -581,8 +516,8 @@ class GUI(QDialog):
                                   / self.camera_controls_group.fps)
         if velocity > velocitymax:
             warning_message("Rotation speed is too large for this sensor width. \
-                            Reduce fps or increase exposure time \
-                            to avoid blurring.")
+                            Experiment will continue. Consider increasing exposure time \
+                            or number of projections to avoid blurring.")
 
     def enable_sync_daq_ring(self):
         self.concert_scan.acq_setup.top_up_veto_enabled = self.ring_status_group.sync_daq_inj.isChecked()
@@ -590,12 +525,25 @@ class GUI(QDialog):
     def send_inj_info_to_acqsetup(self, value):
         self.concert_scan.acq_setup.top_up_veto_state = value
 
+    def select_log_file_func(self):
+        f, fext = self.QFD.getSaveFileName(
+            self, 'Select file', self.file_writer_group.root_dir, "log files (*.log)")
+        if f == '':
+            warning_message('Select file')
+            return
+
+        # use logging from EDC
+        self.log.log_to_file(f+'.log', logging.DEBUG)
+        self.LOG = log.get_module_logger(__name__)
+
+        return
+
     def dump2yaml(self):
 
         f, fext = self.QFD.getSaveFileName(
             self, 'Select file', self.file_writer_group.root_dir, "YAML files (*.yaml)")
         if f == '':
-            warning_message('Select the file')
+            warning_message('Select file')
             return
 
         params ={"Camera":

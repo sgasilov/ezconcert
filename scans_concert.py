@@ -159,6 +159,7 @@ class ACQsetup(object):
         self.darks_softr = Acquisition("darks", self.take_darks_softr)
         # softr
         self.tomo_softr = Acquisition("tomo", self.take_tomo_softr)
+        self.radio_timelaps = Acquisition("radio", self.take_softr_timelaps)
         # auto
         self.tomo_auto_dimax = Acquisition("tomo", self.take_tomo_auto_dimax)
         self.tomo_auto = Acquisition("tomo", self.take_tomo_auto)
@@ -292,16 +293,30 @@ class ACQsetup(object):
             self.ffcsetup.close_shutter()
             if self.camera.state == "recording":
                 self.camera.stop_recording()
-            # return to start position with a small overshoot to
-            # maintain unidirectional repeatability
-            # self.motor['position'].set(self.start-self.step).join()
             LOG.debug("returning inner motor to starting point")
             self.motor["position"].set(self.region[0]).join()
-            # if self.motor.name.startswith("ABRS"):
-            #     self.motor["stepvelocity"].set(5.0 * q.deg / q.sec).join()
+            if self.motor.name.startswith("ABRS"):
+                self.motor["stepvelocity"].set(5.0 * q.deg / q.sec).join()
         except Exception as exp:
             LOG.error(exp)
             info_message("Something is wrong in final in tomo_softr")
+
+    def take_softr_timelaps(self):
+
+        LOG.info("Starting acqusition of images eveny x seconds")
+        sleep(self.start)
+        self.ffcsetup.open_shutter()
+        if self.camera.state == "recording":
+            self.camera.stop_recording()
+        self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+        self.camera.start_recording()
+        sleep(0.01)
+        for i in range(self.nsteps):
+            self.camera.trigger()
+            yield self.camera.grab()
+            sleep(self.step.magnitude)
+        self.camera.stop_recording()
+
 
     def take_tomo_ext(self):
         LOG.info("Starting acquisition: on-the-fly scan, ext trig, libuca buffer")
