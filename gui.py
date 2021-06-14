@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QLabel, QPushButton, QFileDialog, QHBoxLayout
 from PyQt5.QtCore import QTimer, QEventLoop, QFile, QTextStream
 # GUI groups and objects
 from camera_controls import CameraControlsGroup
+from login_dialog import Login
 from motor_controls import MotorsControlsGroup
 from file_writer import FileWriterGroup
 from ffc_settings import FFCSettingsGroup
@@ -167,10 +168,23 @@ class GUI(QDialog):
         # finally
         self.set_layout()
         self.show()
+
+        # call login dialog
+        # use QTimer to make sure the main loop is initialized
+        self.login_parameters = {}
+        QTimer.singleShot(0, self.login)
+
         LOG.info("Start gui.py")
 
+    def login(self):
+        login_dialog = Login(self.login_parameters)
+        if login_dialog.exec_() != QDialog.Accepted:
+            self.exit()
+        else:
+            info_message("Lgged in {:}".format(self.login_parameters['user']))
 
-
+    def exit(self):
+        self.close()
 
     def set_layout(self):
         main_layout = QGridLayout()
