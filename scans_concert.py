@@ -40,9 +40,7 @@ class ConcertScanThread(QThread):
         self.ffc_setup = FFCsetup()
         # Collection of acquisitions we create it once
         self.acq_setup = ACQsetup(self.camera, self.ffc_setup)
-        self.exp = (
-            None  # That is experiment. We create it each time before run is pressed
-        )
+        self.exp = None  # That is experiment. We create it each time before run is pressed
         # before that all camera, acquisition, and ffc parameters must be set according to the
         # user input and consumers must be attached
         self.cons_viewer = None
@@ -66,21 +64,6 @@ class ConcertScanThread(QThread):
     def attach_viewer(self):
         self.cons_viewer = Consumer(self.exp.acquisitions, self.viewer)
 
-    def set_camera_params(self, buf, bufnum, exp_time, fps, x0, width, y0, height):
-        try:
-            self.camera.exposure_time = exp_time * q.msec
-            #self.camera.frame_rate = fps * q.hertz
-            self.camera.buffered = buf
-            if self.camera.buffered:
-                self.camera.num_buffers = bufnum*1.1
-            self.camera.roi_x0 = x0 * q.pixels
-            self.camera.roi_y0 = y0 * q.pixels
-            self.camera.roi_width = width * q.pixels
-            self.camera.roi_height = height * q.pixels
-        except:
-            error_message("Can not set camera parameters")
-            self.scan_finished_signal.emit()
-
     def stop(self):
         self.thread_running = False
         self.wait()
@@ -98,7 +81,7 @@ class ConcertScanThread(QThread):
         if self.running_experiment is not None:
             try:
                 if self.running_experiment.done():
-                    #self.detach_and_clean()
+                    self.detach_and_del_writer()
                     self.scan_finished_signal.emit()
                     self.running_experiment = None
             except:
@@ -115,18 +98,29 @@ class ConcertScanThread(QThread):
         except:
             pass
 
-    def detach_and_clean(self):
+    def detach_and_del_writer(self):
         if self.cons_writer is not None:
             self.cons_writer.detach()
-            del self.walker
+            del self.cons_writer
             self.cons_writer = None
-        if self.cons_viewer is not None:
-            self.cons_viewer.detach()
-            del self.cons_viewer
-            self.cons_viewer = None
+        # if self.cons_viewer is not None:
+        #     self.cons_viewer.detach()
+        #     del self.cons_viewer
+        #     self.cons_viewer = None
+
+    def delete_exp(self):
+        if self.exp is not None:
+            del self.walker
         if self.exp is not None:
             del self.exp
             self.exp = None
+
+
+    def remove_all_acqs(self):
+        if self.exp is None:
+            return
+        for a in self.exp.acquisitions:
+            self.exp.remove(a)
 
 class ACQsetup(object):
 
@@ -203,6 +197,7 @@ class ACQsetup(object):
 
     # Use software trigger
     def take_darks_softr(self):
+        LOG.info("Starting acquisition: darks")
         try:
             self.ffcsetup.close_shutter()
             sleep(1)  # to get rid of possible afterglow
@@ -228,8 +223,10 @@ class ACQsetup(object):
             info_message("Something is wrong in take_darks_softr")
         finally:
             self.camera.stop_recording()
+            LOG.info("Acquired darks")
 
     def take_flats_softr(self):
+        LOG.info("Starting acquisition: flats")
         try:
             self.ffcsetup.prepare_flats()
             self.ffcsetup.open_shutter()
@@ -258,6 +255,7 @@ class ACQsetup(object):
             self.camera.stop_recording()
             self.ffcsetup.close_shutter()
             self.ffcsetup.prepare_radios()
+            LOG.info("Acquired flats")
 
     def take_tomo_softr(self):
         """A generator which yields projections."""
@@ -308,15 +306,16 @@ class ACQsetup(object):
     def take_tomo_ext(self):
         LOG.info("Starting acquisition: on-the-fly scan, ext trig, libuca buffer")
         self.prep4ext_trig_scan_with_PSO()
-        try:
-            self.camera.start_recording()
-            sleep(0.01)
-            self.motor.PSO_multi(False)
-            for i in range(self.nsteps):
-                yield self.camera.grab()
-        except Exception as exp:
-            LOG.error(exp)
-            error_message("Problem in PSO scan")
+        self.camera.start_recording()
+        sleep(0.01)
+        LOG.info("Sending PSO command")
+        self.motor.PSO_multi(False)
+        sleep(0.5) # EPICS delays? shouldn't matter for grab, but just in case
+        # read-out
+        LOG.info("Starting read-out from libuca buffer")
+        for i in range(self.nsteps):
+            yield self.camera.grab()
+        LOG.info("Read-out done; finilizing acquisition")
         self.camera.stop_recording()
         self.ffcsetup.close_shutter()
         self.return_ct_stage_to_start(block=True)
@@ -437,7 +436,7 @@ class ACQsetup(object):
                 )
             ).join()
             self.motor["stepangle"].set(self.step).join()
-            self.motor.LENGTH = self.step * self.nsteps * 1.02
+            self.motor.LENGTH = self.step * self.nsteps * 1.05 #overshooting a bit for the sake of stability
             LOG.debug(
                 "Velocity: {}, Step: {}, Range: {}".format(
                     self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH

@@ -346,10 +346,11 @@ class CameraControlsGroup(QGroupBox):
         try:
             self.camera = UcaCamera('pco')
         except:
-            try:
-                self.camera = UcaCamera('pcoclhs')
-            except:
-                self.on_camera_connect_failure()
+            self.on_camera_connect_failure()
+        # try:
+        #     self.camera = UcaCamera('pcoclhs')
+        # except:
+        #     self.on_camera_connect_failure()
 
         if self.camera is not None:
             self.on_camera_connect_success()
@@ -462,6 +463,7 @@ class CameraControlsGroup(QGroupBox):
         self.camera_model_label.setText("")
 
     def set_camera_params(self):
+        LOG.info("Setting camera parameters")
         if self.camera_model_label.text() == 'Dummy camera':
             return -1
         try:
@@ -474,11 +476,13 @@ class CameraControlsGroup(QGroupBox):
                 self.camera.sensor_pixelrate = int(self.sensor_pix_rate_entry.currentText())
             self.camera.buffered = self.buffered
             if self.camera.buffered:
-                self.camera.num_buffers = self.buffnum*1.1
+                self.camera.num_buffers = self.buffnum
             self.set_time_stamp()
             self.setROI()
         except:
-            error_message("Can not set camera parameters")
+            tmp = "Can not set camera parameters"
+            LOG.error(tmp)
+            error_message(tmp)
             return 0
         else:
             return 1
@@ -563,7 +567,7 @@ class CameraControlsGroup(QGroupBox):
         self.lv_experiment.run()
 
     def live_off_func(self):
-        LOG.error("Live off func called")
+        LOG.info("Live off func called")
         self.live_preview_thread.live_on = False
         self.lv_stream2disk_on = False
         self.ena_disa_buttons(True)

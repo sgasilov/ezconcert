@@ -560,6 +560,7 @@ class EpicsMonitorFIS(QObject):
 
 
 class MotionThread(QThread):
+    motion_over_signal = pyqtSignal(bool)
     def __init__(self, motor, position, rel_position=None, direction=1):
         super(MotionThread, self).__init__()
         self.motor = motor
@@ -568,6 +569,7 @@ class MotionThread(QThread):
         self.position = position
         self.rel_position = rel_position
         self.direction = direction
+        self.is_moving = False
 
     def stop(self):
         self.thread_running = False
@@ -583,13 +585,17 @@ class MotionThread(QThread):
                     final_pos += (
                         self.rel_position.value() * self.direction * self.motor.UNITS
                     )
+                self.is_moving = True
                 self.motor.position = final_pos
+                self.is_moving = False
+                self.motion_over_signal.emit(True)
                 self.thread_running = False
             except TransitionNotAllowed:
                 error_message("Stage is moving. Wait until motion has stopped.")
                 self.thread_running = False
 
     def abort(self):
+        self.is_moving = False
         try:
             self.motor.abort()
         except:
