@@ -184,10 +184,10 @@ class GUI(QDialog):
             self.log = self._log.get_module_logger(__name__)
             self.log.info("Start gui.py")
             # add motors automatically on start
-            # self.motor_control_group.connect_hor_mot_button.animateClick()
-            # self.motor_control_group.connect_vert_mot_button.animateClick()
-            # self.motor_control_group.connect_CT_mot_button.animateClick()
-            # self.motor_control_group.connect_shutter_button.animateClick()
+            self.motor_control_group.connect_hor_mot_button.animateClick()
+            self.motor_control_group.connect_vert_mot_button.animateClick()
+            self.motor_control_group.connect_CT_mot_button.animateClick()
+            self.motor_control_group.connect_shutter_button.animateClick()
 
     def exit(self):
         self.close()
