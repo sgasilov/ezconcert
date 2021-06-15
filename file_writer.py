@@ -15,7 +15,7 @@ class FileWriterGroup(QGroupBox):
         self.root_dir_label = QLabel()
         self.root_dir_label.setText("Root dir:")
         self.root_dir_entry = QLineEdit()
-        self.root_dir_entry.setText("/data/gui-test")
+        #self.root_dir_entry.setText()
         self.root_dir_entry.setReadOnly(True)
         self.root_dir_select_button = QPushButton("...")
         self.root_dir_select_button.clicked.connect(self.select_root_directory)

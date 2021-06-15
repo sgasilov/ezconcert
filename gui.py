@@ -1,4 +1,4 @@
-import os
+
 # PyQT imports
 from PyQt5.QtWidgets import QGroupBox, QDialog, QApplication, QGridLayout
 from PyQt5.QtWidgets import QLabel, QPushButton, QFileDialog, QHBoxLayout
@@ -20,9 +20,6 @@ from on_the_fly_reco_settings import RecoSettingsGroup
 from concert.storage import DirectoryWalker
 from concert.ext.viewers import PyplotImageViewer
 from concert.devices.shutters.dummy import Shutter as DummyShutter
-from concert.experiments.imaging import (tomo_projections_number, tomo_max_speed, frames)
-from concert.base import TransitionNotAllowed
-# from concert.session.utils import ddoc, dstate, pdoc, code_of, abort
 from concert.quantities import q
 import sys
 # from time import sleep
@@ -33,14 +30,15 @@ from numpy import linspace
 import yaml
 import time
 import argparse
+import os
+import numpy as np
 # Dark style
 # noinspection PyUnresolvedReferences
 from styles.breeze import styles_breeze
 from edc import log
 concert.require("0.11.0")
 
-log.log_to_file('concert.log', logging.DEBUG)
-LOG = log.get_module_logger(__name__)
+
 
 
 def process_cl_args():
@@ -55,16 +53,21 @@ class GUI(QDialog):
     Creates main GUI, holds references to physical devices, and
     provides start/abort controls for Concert scans, and holds
     4 groups where parameters can be entered
-    Also has some helper functions such as
-    setter which updates all camera parameters
     '''
 
     def __init__(self, *args, **kwargs):
         super(GUI, self).__init__(*args, **kwargs)
         self.setWindowTitle('BMIT GUI')
 
+        self.show()
+
+        # call login dialog
+        # use QTimer to make sure the main loop is initialized
+        self.login_parameters = {}
+        QTimer.singleShot(0, self.login)
+
+        self._log = None
         self.log = None
-        self.LOG = None
 
         # CAMERA
         self.camera = None
@@ -122,11 +125,6 @@ class GUI(QDialog):
         self.motor_control_group.connect_vert_mot_button.clicked.connect(self.add_mot_vert)
         self.motor_control_group.connect_CT_mot_button.clicked.connect(self.add_mot_CT)
         self.motor_control_group.connect_shutter_button.clicked.connect(self.add_mot_sh)
-        # add motors automatically on start
-        # self.motor_control_group.connect_hor_mot_button.animateClick()
-        # self.motor_control_group.connect_vert_mot_button.animateClick()
-        # self.motor_control_group.connect_CT_mot_button.animateClick()
-        # self.motor_control_group.connect_shutter_button.animateClick()
 
         # Variables for outer loop
         self.number_of_scans = 1
@@ -167,21 +165,29 @@ class GUI(QDialog):
 
         # finally
         self.set_layout()
-        self.show()
 
-        # call login dialog
-        # use QTimer to make sure the main loop is initialized
-        self.login_parameters = {}
-        QTimer.singleShot(0, self.login)
-
-        LOG.info("Start gui.py")
 
     def login(self):
         login_dialog = Login(self.login_parameters)
         if login_dialog.exec_() != QDialog.Accepted:
             self.exit()
         else:
-            info_message("Lgged in {:}".format(self.login_parameters['user']))
+            #info_message("Logged in {:}".format(self.login_parameters['expdir']))
+            self.file_writer_group.root_dir_entry.setText(self.login_parameters['expdir'])
+            logfname = os.path.join(self.login_parameters['expdir'],'exp-log.log')
+            try:
+                open(logfname, 'a').close()
+            except:
+                warning_message('Cannot create log file')
+            self._log = log
+            self._log.log_to_file(logfname, logging.DEBUG)
+            self.log = self._log.get_module_logger(__name__)
+            self.log.info("Start gui.py")
+            # add motors automatically on start
+            # self.motor_control_group.connect_hor_mot_button.animateClick()
+            # self.motor_control_group.connect_vert_mot_button.animateClick()
+            # self.motor_control_group.connect_CT_mot_button.animateClick()
+            # self.motor_control_group.connect_shutter_button.animateClick()
 
     def exit(self):
         self.close()
@@ -235,7 +241,8 @@ class GUI(QDialog):
         self.ring_status_group.status_monitor.i0_state_changed_signal2.connect(
             self.send_inj_info_to_acqsetup)
         self.ring_status_group.sync_daq_inj.stateChanged.connect(self.enable_sync_daq_ring)
-
+        self.concert_scan.acq_setup.log = self.log
+        self.camera_controls_group.log = self.log
 
     def ena_disa_all(self, val=True):
         self.motor_control_group.setEnabled(val)
@@ -257,11 +264,11 @@ class GUI(QDialog):
                                  self.scan_controls_group.outer_start + self.scan_controls_group.outer_range,
                                  self.scan_controls_group.outer_steps, False)
         elif self.scan_controls_group.outer_steps == 0:
-            self.number_of_scans = 1 # won't work for timer
+            self.number_of_scans = 1
             if self.scan_controls_group.outer_motor != 'Timer [sec]':
                 return [self.motors[self.scan_controls_group.outer_motor].position.magnitude]
             else:
-                return 0
+                return [0]
         else:
             error_message("Outer motor start/steps/range entered incorrectly ")
             self.abort()
@@ -270,9 +277,9 @@ class GUI(QDialog):
         if self.camera_controls_group.live_on or \
                 self.camera_controls_group.lv_stream2disk_on:
             self.camera_controls_group.live_off_func()
-        if self.scan_controls_group.inner_loop_continuous:
-            self.validate_velocity()
-        LOG.info("***** EXPERIMENT STARTED *****")
+        #if self.scan_controls_group.inner_loop_continuous:
+        #    self.validate_velocity()
+        self.log.info("***** EXPERIMENT STARTED *****")
         self.ena_disa_all(False)
         time.sleep(0.5)
         self.number_of_scans = 1 # we expect to make at least one scan
@@ -289,7 +296,7 @@ class GUI(QDialog):
 
     def move_to_start(self, begin_exp=True):
         # insert check large discrepancy between present position and start position
-        LOG.info("Moving inner motor to starting point")
+        self.log.info("Moving inner motor to starting point")
 
         self.motor_control_group.motion_CT = MotionThread(
                     self.motors[self.scan_controls_group.inner_motor],
@@ -316,7 +323,7 @@ class GUI(QDialog):
     def doscan(self):
         tmp = self.scan_controls_group.outer_steps - self.number_of_scans + 1
         self.scan_controls_group.setTitle("Experiment is running; doing scan {}".format(tmp))
-        LOG.info("STARTING SCAN {:}".format(tmp))
+        self.log.info("STARTING SCAN {:}".format(tmp))
         # before starting scan we have to create new experiment and update parameters
         # of acquisitions, flat-field correction, camera, consumers, etc based on the user input
         self.add_acquisitions_to_exp()
@@ -342,12 +349,12 @@ class GUI(QDialog):
         self.number_of_scans -= 1
         if self.number_of_scans > 0:
             if self.scan_controls_group.outer_motor == 'Timer [sec]':
-                LOG.info("DELAYING THE NEXT SCAN")
+                self.log.info("DELAYING THE NEXT SCAN")
                 self.scan_controls_group.setTitle("Experiment is running; delaying the next scan")
                 self.gui_timer.singleShot((self.outer_region[1] - self.outer_region[0]) * 1000,
                                   self.doscan)
             else:
-                LOG.info("MOVING TO THE NEXT OUTER MOTOR POINT")
+                self.log.info("MOVING TO THE NEXT OUTER MOTOR POINT")
                 #get index of the next step
                 tmp = self.scan_controls_group.outer_steps - self.number_of_scans
                 #move motor to the next absolute position in the scan region
@@ -357,7 +364,7 @@ class GUI(QDialog):
                 self.motor_control_group.motion_vert.motion_over_signal.connect(self.doscan)
         else: # all scans done, finish the experiment
             # This section runs only if scan was finished normally, not aborted
-            LOG.info("***** EXPERIMENT finished without errors ****")
+            self.log.info("***** EXPERIMENT finished without errors ****")
             # End of section
             self.scan_controls_group.setTitle(
                 "Scan controls. Status: scans were finished without errors. \
@@ -376,7 +383,7 @@ class GUI(QDialog):
         self.move_to_start(begin_exp=False)
 
     def set_scan_params(self):
-        LOG.info("Setting scan parameters")
+        self.log.info("Setting scan parameters")
         '''To be called before Experiment.run
            to set all parameters required for correct data acquisition'''
         problem_with_params = False
@@ -406,7 +413,7 @@ class GUI(QDialog):
             else:
                 self.concert_scan.ffc_setup.shutter = self.shutter
         except:
-            LOG.error("Scan params defined incorrectly. Aborting")
+            self.log.error("Scan params defined incorrectly. Aborting")
             info_message("Select flat field motor and define parameters correctly")
             problem_with_params = True
         # SET FFC parameters
@@ -419,7 +426,7 @@ class GUI(QDialog):
                 self.concert_scan.acq_setup.num_flats = self.ffc_controls_group.num_flats
                 self.concert_scan.acq_setup.num_darks = self.ffc_controls_group.num_darks
             except:
-                LOG.error("Flat-field params defined incorrectly. Aborting")
+                self.log.error("Flat-field params defined incorrectly. Aborting")
                 error_message("Select flat field motor and define parameters correctly")
                 problem_with_params = True
         if problem_with_params:
@@ -427,7 +434,7 @@ class GUI(QDialog):
             self.end_of_scan()
 
     def create_exp(self):
-        LOG.info("creating concert experiment")
+        self.log.info("creating concert experiment")
         acquisitions = []
         #**********CREATE EXPERIMENT AND ATTACH CONSUMERS
         # CREATE NEW WALKER
@@ -448,7 +455,7 @@ class GUI(QDialog):
 
 
     def add_acquisitions_to_exp(self):
-        LOG.info("adding acqusitions to concert experiment")
+        self.log.info("adding acqusitions to concert experiment")
         self.concert_scan.remove_all_acqs()
         # ffc before
         if self.scan_controls_group.ffc_before or \
@@ -524,14 +531,20 @@ class GUI(QDialog):
 
 
     def validate_velocity(self):
-        velocitymax = tomo_max_speed(self.setup.camera.roi_width,
-                                  self.setup.camera.frame_rate)
-        velocity = self.scan_controls_group.inner_range * q.deg / (self.scan_controls_group.inner_loop_steps_entry
-                                  / self.camera_controls_group.fps)
-        if velocity > velocitymax:
-            warning_message("Rotation speed is too large for this sensor width. \
-                            Experiment will continue. Consider increasing exposure time \
-                            or number of projections to avoid blurring.")
+        #taken from concert/imaging.py by T. Farago
+        # every pixel of the frame rotates no more than one pixel per rotation step
+        tomo_ang_step = np.arctan(2.0 / self.camera_controls_group.roi_width)
+        #minimum number of projections in order to provide enough
+        #data points for every distance from the axis of rotation
+        tomo_proj_num = int(np.ceil(np.pi / tomo_ang_step))
+        # speed at which motion blur will exceed one pixel
+        tomo_max_rot_velo = tomo_ang_step * self.camera_controls_group.fps
+        velocity = self.scan_controls_group.inner_range / \
+            (self.scan_controls_group.inner_steps / self.camera_controls_group.fps)
+        if velocity > tomo_max_rot_velo:
+            warning_message("Rotation speed is too large for this ROI width.\n"
+                            "Consider increasing exposure time or num of projections to avoid blurring.\n"
+                            "Experiment will continue.")
 
     def enable_sync_daq_ring(self):
         self.concert_scan.acq_setup.top_up_veto_enabled = self.ring_status_group.sync_daq_inj.isChecked()
@@ -547,8 +560,8 @@ class GUI(QDialog):
             return
 
         # use logging from EDC
-        self.log.log_to_file(f+'.log', logging.DEBUG)
-        self.LOG = log.get_module_logger(__name__)
+        self._log.log_to_file(f+'.log', logging.DEBUG)
+        self.log = self._log.get_module_logger(__name__)
 
         return
 
