@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, QPushButton, QFileDialog, QCheckBox
-
+import os
+from message_dialog import info_message, error_message
 
 class FileWriterGroup(QGroupBox):
     """
@@ -14,7 +15,7 @@ class FileWriterGroup(QGroupBox):
         self.root_dir_label = QLabel()
         self.root_dir_label.setText("Root dir:")
         self.root_dir_entry = QLineEdit()
-        self.root_dir_entry.setText("/data/gui-test")
+        #self.root_dir_entry.setText()
         self.root_dir_entry.setReadOnly(True)
         self.root_dir_select_button = QPushButton("...")
         self.root_dir_select_button.clicked.connect(self.select_root_directory)
@@ -73,8 +74,13 @@ class FileWriterGroup(QGroupBox):
     @property
     def root_dir(self):
         try:
-            return self.root_dir_entry.text()
+            tmp = self.root_dir_entry.text()
         except ValueError:
+            error_message("Incorrect path to root directory")
+        if os.access(tmp, os.W_OK):
+            return tmp
+        else:
+            error_message("Cannot write into root dir. Check filewriter params")
             return None
 
     @property

@@ -21,10 +21,10 @@ from concert.writers import TiffWriter
 from concert.experiments.base import Acquisition, Experiment
 from time import sleep
 import os
-import logging
-from edc import log
-log.log_to_file("camera.log", logging.DEBUG)
-LOG = log.get_module_logger(__name__)
+
+
+# self.log.self.log_to_file("camera.self.log", self.logging.DEBUG)
+# self.log = self.log.get_module_self.logger(__name__)
 
 class CameraControlsGroup(QGroupBox):
     """
@@ -37,7 +37,8 @@ class CameraControlsGroup(QGroupBox):
         super(CameraControlsGroup, self).__init__(*args, **kwargs)
         self.timer = QTimer()
         self.camera = None
-
+        self.log = None
+        
         # Buttons
         self.live_on_button = QPushButton("LIVE ON")
         self.live_on_button.clicked.connect(self.live_on_func)
@@ -346,10 +347,11 @@ class CameraControlsGroup(QGroupBox):
         try:
             self.camera = UcaCamera('pco')
         except:
-            try:
-                self.camera = UcaCamera('pcoclhs')
-            except:
-                self.on_camera_connect_failure()
+            self.on_camera_connect_failure()
+        # try:
+        #     self.camera = UcaCamera('pcoclhs')
+        # except:
+        #     self.on_camera_connect_failure()
 
         if self.camera is not None:
             self.on_camera_connect_success()
@@ -462,6 +464,7 @@ class CameraControlsGroup(QGroupBox):
         self.camera_model_label.setText("")
 
     def set_camera_params(self):
+        self.log.info("Setting camera parameters")
         if self.camera_model_label.text() == 'Dummy camera':
             return -1
         try:
@@ -474,14 +477,16 @@ class CameraControlsGroup(QGroupBox):
                 self.camera.sensor_pixelrate = int(self.sensor_pix_rate_entry.currentText())
             self.camera.buffered = self.buffered
             if self.camera.buffered:
-                self.camera.num_buffers = self.buffnum*1.1
+                self.camera.num_buffers = self.buffnum
             self.set_time_stamp()
             self.setROI()
         except:
-            error_message("Can not set camera parameters")
-            return 0
+            tmp = "Can not set camera parameters"
+            self.log.error(tmp)
+            error_message(tmp)
+            return True
         else:
-            return 1
+            return False
 
     def set_time_stamp(self):
         if self.time_stamp.isChecked():
@@ -499,7 +504,7 @@ class CameraControlsGroup(QGroupBox):
             error_message("ROI is not correctly defined for the sensor, check multipliers and centering")
 
     def live_on_func(self):
-        LOG.info("Live view on with auto trigger")
+        self.log.info("Live view on with auto trigger")
         self.ena_disa_buttons(False)
         if self.camera.state == "recording":
             self.camera.stop_recording()
@@ -514,7 +519,7 @@ class CameraControlsGroup(QGroupBox):
         self.lv_duration = time.time()
 
     def live_on_func_ext_trig(self):
-        LOG.info("Live view on with external trigger")
+        self.log.info("Live view on with external trigger")
         self.ena_disa_buttons(False)
         if self.camera.state == "recording":
             self.camera.stop_recording()
@@ -541,7 +546,7 @@ class CameraControlsGroup(QGroupBox):
         self.cons_viewer = Consumer(self.lv_acquisitions, self.viewer)
 
     def acq_lv_stream2disk(self):
-        LOG.info("Streaming lv sequence to disk")
+        self.log.info("Streaming lv sequence to disk")
         self.ena_disa_buttons(False)
         if self.camera.state == "recording":
             self.camera.stop_recording()
@@ -553,7 +558,7 @@ class CameraControlsGroup(QGroupBox):
             while self.lv_stream2disk_on:
                 yield self.camera.grab()
         except Exception as exp:
-            LOG.error(exp)
+            self.log.error(exp)
 
     def live_on_func_stream2disk(self):
         if self.fname == None:
@@ -563,15 +568,15 @@ class CameraControlsGroup(QGroupBox):
         self.lv_experiment.run()
 
     def live_off_func(self):
-        LOG.error("Live off func called")
+        self.log.info("Live off func called")
         self.live_preview_thread.live_on = False
         self.lv_stream2disk_on = False
         self.ena_disa_buttons(True)
         try:
             self.camera.stop_recording()
         except Exception as exp:
-            LOG.error("Cannot stop recording to stop the live view")
-            LOG.error(exp)
+            self.log.error("Cannot stop recording to stop the live view")
+            self.log.error(exp)
             # if self.camera_model_label.text() != 'Dummy camera':
             #    error_message("Cannot stop recording")
         self.lv_duration = time.time() - self.lv_duration
@@ -583,7 +588,7 @@ class CameraControlsGroup(QGroupBox):
             self.frames_in_last_lv_seq = self.camera.recorded_frames.magnitude
             self.setTitle("Camera controls. Status: recorded {0} frames in {1:.03f} seconds".
                                      format(self.frames_in_last_lv_seq,self.lv_duration))
-        LOG.info("Live view stopped")
+        self.log.info("Live view stopped")
 
     def save_lv_seq(self):
         self.abort_transfer_button.setEnabled(True)
@@ -706,6 +711,7 @@ class CameraControlsGroup(QGroupBox):
         else:
             x = int(1000.0 / self.exp_time)
         self.fps_entry.setText("{:.02f}".format(x))
+        return x
 
     def get_fps_max_estimate(self):
         x = 0
@@ -726,7 +732,7 @@ class CameraControlsGroup(QGroupBox):
         except ValueError:
             warning_message("{:}".format(
                 "FPS a positive number. Setting FPS based on exp. time"))
-            self.relate_fps_to_exptime()
+            x = self.relate_fps_to_exptime()
         if x < 0:
             error_message("{:}".format("FPS must be positive"))
             self.all_cam_params_correct = False
@@ -741,9 +747,11 @@ class CameraControlsGroup(QGroupBox):
         # if self.camera_model_label.text() == 'PCO Edge' and (x > 100):
         #     error_message("{:}".format("PCO Edge max FPS is 100"))
         #     self.all_cam_params_correct = False
-        if int(x) < int(1000.0 / (self.exp_time + self.dead_time)): #because of round of errors
-            #warning_message("FPS [Hz] cannot exceed 1/exp.time[s]; setting fps=1/exp.time")
-            self.relate_fps_to_exptime()
+        # if int(x) < int(1000.0 / (self.exp_time + self.dead_time)): #because of round of errors
+        #     #warning_message("FPS [Hz] cannot exceed 1/exp.time[s]; setting fps=1/exp.time")
+        #     self.relate_fps_to_exptime()
+        elif self.trig_mode == "EXTERNAL":
+            x = self.relate_fps_to_exptime()
         self.fps_entry.setText("{:.02f}".format(x))
         return x
 
