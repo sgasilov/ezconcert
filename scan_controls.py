@@ -51,16 +51,13 @@ class ScanControlsGroup(QGroupBox):
         self.outer_loop_motor = QComboBox()
         self.outer_loop_flats_0 = QCheckBox("Before")
         self.outer_loop_flats_0.setChecked(False)
-        #self.outer_loop_flats_0.setEnabled(False)
         self.outer_loop_start_entry = QLineEdit()
         self.outer_loop_steps_entry = QLineEdit()
-        #self.outer_loop_steps_entry.setText("0")
         self.outer_loop_range_entry = QLineEdit()
         self.outer_loop_endpoint = QCheckBox("Include")
         self.outer_loop_endpoint.setChecked(True)
         self.outer_loop_flats_1 = QCheckBox("After")
         self.outer_loop_flats_1.setChecked(False)
-        #self.outer_loop_flats_1.setEnabled(False)
         self.outer_loop_continuous = QCheckBox("On-the-fly")
         self.outer_loop_continuous.setChecked(False)
         self.outer_loop_continuous.setEnabled(False)
@@ -247,4 +244,24 @@ class ScanControlsGroup(QGroupBox):
     def ffc_after_outer(self):
         return self.outer_loop_flats_1.isChecked()
 
+    def ena_disa_all_entries(self, v=True):
+        self.readout_intheend.setEnabled(v)
+        self.outer_loop_motor.setEnabled(v)
+        self.outer_loop_flats_0.setEnabled(v)
+        self.outer_loop_start_entry.setEnabled(v)
+        self.outer_loop_steps_entry.setEnabled(v)
+        self.outer_loop_range_entry.setEnabled(v)
+        self.outer_loop_endpoint.setEnabled(v)
+        self.outer_loop_flats_1.setEnabled(v)
+        #self.outer_loop_continuous.setEnabled(v)
+        self.inner_loop_motor.setEnabled(v)
+        self.inner_loop_flats_0.setEnabled(v)
+        self.inner_loop_start_entry.setEnabled(v)
+        self.inner_loop_steps_entry.setEnabled(v)
+        self.inner_loop_range_entry.setEnabled(v)
+        self.inner_loop_endpoint.setEnabled(v)
+        self.inner_loop_flats_1.setEnabled(v)
+        #self.inner_loop_continuous.setEnabled(v)
+        
+        
 

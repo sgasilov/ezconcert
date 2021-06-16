@@ -23,9 +23,6 @@ from time import sleep
 import os
 
 
-# self.log.self.log_to_file("camera.self.log", self.logging.DEBUG)
-# self.log = self.log.get_module_self.logger(__name__)
-
 class CameraControlsGroup(QGroupBox):
     """
     Camera controls
@@ -345,7 +342,7 @@ class CameraControlsGroup(QGroupBox):
         self.connect_to_camera_status.setStyleSheet("color: orange")
 
         try:
-            self.camera = UcaCamera('pco')
+            self.camera = UcaCamera('pcoclhs')
         except:
             self.on_camera_connect_failure()
         # try:
@@ -664,8 +661,12 @@ class CameraControlsGroup(QGroupBox):
         if self.trigger_entry.currentText() == 'EXTERNAL':
             if self.camera_model_label.text() == 'PCO Dimax':
                 self.delay_entry.setText('1')
+                self.buffered_entry.setEnabled(False)
+                self.n_buffers_entry.setEnabled(False)
             if self.camera_model_label.text() == 'PCO Edge':
                 self.delay_entry.setText('{0:d}'.format(1000/self.get_fps_max_estimate()))
+                self.buffered_entry.setEnabled(True)
+                self.n_buffers_entry.setEnabled(True)
             self.delay_entry.setEnabled(True)
 
     def ena_disa_buttons(self, val):
@@ -882,7 +883,7 @@ class CameraControlsGroup(QGroupBox):
     @property
     def pix_rate(self):
         try:
-            return int(self.camera.sensor_pixelrates.currentText())*1e6
+            return int(self.sensor_pix_rate_entry.currentText())
         except:
             warning_message('Can not get read-out rate')
 
