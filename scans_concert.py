@@ -317,6 +317,7 @@ class ACQsetup(object):
         self.log.info("Starting acquisition: on-the-fly scan, ext trig, libuca buffer")
         if self.camera.state == "recording":
             self.camera.stop_recording()
+        self.camera.frame_grabber_ext_timeout = 10 * q.sec
         self.camera.buffered = True
         self.prep4ext_trig_scan_with_PSO()
         self.camera.start_recording()
@@ -453,7 +454,7 @@ class ACQsetup(object):
                 )
             ).join()
             self.motor["stepangle"].set(self.step).join()
-            self.motor.LENGTH = self.step * self.nsteps * 1.05 #overshooting a bit for the sake of stability
+            self.motor.LENGTH = self.step * self.nsteps * 1.01 #overshooting a bit for the sake of stability
             self.log.debug(
                 "Velocity: {}, Step: {}, Range: {}".format(
                     self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH

@@ -167,6 +167,12 @@ class GUI(QDialog):
         # finally
         self.set_layout()
 
+    def closeEvent(self, event):
+        if self.camera_controls_group.camera is not None:
+            if self.camera_controls_group.camera.state == 'recording':
+                self.camera_controls_group.camera.stop_recording()
+            self.camera_controls_group.camera.uca._unref()
+            del self.camera
 
     def login(self):
         login_dialog = Login(self.login_parameters)
@@ -504,11 +510,11 @@ class GUI(QDialog):
         self.concert_scan.abort_scan()
         self.motor_control_group.stop_motors_func()
         self.motor_control_group.close_shutter_func()
+        if self.camera_controls_group.camera.state == 'recording':
+            self.camera_controls_group.camera.stop_recording()
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
         self.return_button.setEnabled(True)
-        if self.camera_controls_group.camera.state == 'recording':
-            self.camera_controls_group.camera.stop_recording()
         self.scan_controls_group.setTitle(
             "Scan controls. Status: scan was aborted")
         self.ena_disa_all(True)
@@ -711,8 +717,6 @@ class GUI(QDialog):
             self.file_writer_group.separate_scans_checkbox.setChecked(p['Writer']['Separate scans'])
         except:
             warning_message('Cannot enter file-writer settings correctly')
-
-
 
 if __name__ == '__main__':
     parsed_args, unparsed_args = process_cl_args()
