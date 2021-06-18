@@ -35,11 +35,13 @@ class ConcertScanThread(QThread):
         # before that all camera, acquisition, and ffc parameters must be set according to the
         # user input and consumers must be attached
         self.cons_viewer = None
+        self.walker = None
         self.cons_writer = None
         self.thread_running = True
         atexit.register(self.stop)
         self.starting_scan = False
         self.running_experiment = None
+        self.log = None
 
     def create_experiment(self, acquisitions, ctsetname, sep_scans):
         self.exp = Experiment(
@@ -75,6 +77,7 @@ class ConcertScanThread(QThread):
                     self.detach_and_del_writer()
                     self.scan_finished_signal.emit()
                     self.running_experiment = None
+                    self.log.debug("Experiment done in Concert thread")
             except:
                 pass
 
@@ -84,8 +87,9 @@ class ConcertScanThread(QThread):
     def abort_scan(self):
         try:
             self.exp.abort()
-            self.detach_and_clean()
+            self.delete_exp()
             self.running_experiment = None
+            self.log.debug("Abort scan executed correctly in Concert thread")
         except:
             pass
 
@@ -94,15 +98,13 @@ class ConcertScanThread(QThread):
             self.cons_writer.detach()
             del self.cons_writer
             self.cons_writer = None
-        # if self.cons_viewer is not None:
-        #     self.cons_viewer.detach()
-        #     del self.cons_viewer
-        #     self.cons_viewer = None
 
     def delete_exp(self):
         if self.exp is not None:
-            del self.walker
-        if self.exp is not None:
+            self.detach_and_del_writer()
+            if self.walker is not None:
+                del self.walker
+                self.walker = None
             del self.exp
             self.exp = None
 
@@ -112,6 +114,7 @@ class ConcertScanThread(QThread):
             return
         for a in self.exp.acquisitions:
             self.exp.remove(a)
+        self.log.debug("Cleaned the list of acqs in exp")
 
 class ACQsetup(object):
 
@@ -317,7 +320,7 @@ class ACQsetup(object):
         self.log.info("Starting acquisition: on-the-fly scan, ext trig, libuca buffer")
         if self.camera.state == "recording":
             self.camera.stop_recording()
-        self.camera.frame_grabber_ext_timeout = 10 * q.sec
+
         self.camera.buffered = True
         self.prep4ext_trig_scan_with_PSO()
         self.camera.start_recording()

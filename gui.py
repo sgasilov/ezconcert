@@ -254,6 +254,7 @@ class GUI(QDialog):
         self.ring_status_group.sync_daq_inj.stateChanged.connect(self.enable_sync_daq_ring)
         self.concert_scan.acq_setup.log = self.log
         self.camera_controls_group.log = self.log
+        self.concert_scan.log = self.log
 
     def ena_disa_all(self, val=True):
         self.motor_control_group.setEnabled(val)
@@ -285,7 +286,18 @@ class GUI(QDialog):
             error_message("Outer motor start/steps/range entered incorrectly ")
             self.abort()
 
+    def check_data_overwrite(self):
+        if self.file_writer_group.isChecked():
+            if os.path.exists(os.path.join( \
+                    self.file_writer_group.root_dir, \
+                    self.file_writer_group.ctsetname.format(1))):
+                warning_message("Output directory exists. \n"
+                                "Change root dir or name pattern"
+                                "and start again")
+                self.abort()
+
     def start(self):
+        #self.check_data_overwrite()
         if self.camera_controls_group.live_on or \
                 self.camera_controls_group.lv_stream2disk_on:
             self.camera_controls_group.live_off_func()
@@ -309,6 +321,20 @@ class GUI(QDialog):
     def move_to_start(self, begin_exp=True):
         # insert check large discrepancy between present position and start position
         self.log.info("Moving inner motor to starting point")
+
+        # workaround for EDC/Soloist problem -  won't move sometime after abort
+        # if position hasn't been change a tiny amount
+        if abs(self.motors[self.scan_controls_group.inner_motor].position.magnitude - \
+                self.scan_controls_group.inner_start) > 0.01:
+            self.log.debug("Tiny move to avoid bug with CT stage not moving")
+            self.motor_control_group.motion_CT = MotionThread(
+                self.motors[self.scan_controls_group.inner_motor],
+                self.motors[self.scan_controls_group.inner_motor].position.magnitude,
+                1, -1)
+            self.motor_control_group.motion_CT.start()
+            while self.motor_control_group.motion_CT.is_moving:
+                time.sleep(1)
+        # end of workaround for CT stage
 
         self.motor_control_group.motion_CT = MotionThread(
                     self.motors[self.scan_controls_group.inner_motor],
@@ -466,7 +492,6 @@ class GUI(QDialog):
                                             self.file_writer_group.ctsetname,
                                             self.file_writer_group.separate_scans)
 
-
     def add_acquisitions_to_exp(self):
         self.log.info("adding acqusitions to concert experiment")
         self.concert_scan.remove_all_acqs()
@@ -504,14 +529,22 @@ class GUI(QDialog):
             self.concert_scan.attach_writer()
         self.concert_scan.attach_viewer()
 
+
+
     def abort(self):
         self.number_of_scans = 0
+        if self.camera_controls_group.camera.state == 'recording':
+            self.camera_controls_group.camera.stop_recording()
         self.gui_timer.stop()
         self.concert_scan.abort_scan()
         self.motor_control_group.stop_motors_func()
         self.motor_control_group.close_shutter_func()
-        if self.camera_controls_group.camera.state == 'recording':
-            self.camera_controls_group.camera.stop_recording()
+        # to stop libuca errors in case if ext trig + buff
+        if self.camera_controls_group.trig_mode == 'EXTERNAL':
+            self.log.debug("Workaround for libuca problem")
+            self.camera_controls_group.live_on_func()
+            self.camera_controls_group.live_off_func()
+        # finished workaround for libuca error spam
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
         self.return_button.setEnabled(True)

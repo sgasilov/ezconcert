@@ -136,7 +136,7 @@ class CameraControlsGroup(QGroupBox):
         self.viewer_highlim_label = QLabel()
         self.viewer_highlim_label.setText("Viewer high limit")
         self.viewer_highlim_entry = QLineEdit()
-        self.viewer_highlim_entry.setText("50")
+
 
         # ROI
         # y0
@@ -399,17 +399,21 @@ class CameraControlsGroup(QGroupBox):
             self.buffered_entry.setCurrentIndex(tmp)
             self.buffered_entry.setEnabled(False)
             self.n_buffers_entry.setEnabled(False)
+            self.viewer_highlim_entry.setText("40")
         if self.camera.sensor_width.magnitude == 4008:
             self.camera_model_label.setText("PCO 4000")
             self.connect_to_camera_status.setText("CONNECTED to PCO 4000")
             self.trigger_entry.addItems(["SOFTWARE"])
             self.trigger_entry.setEnabled(False)
+            self.viewer_highlim_entry.setText("110")
         if self.camera.sensor_width.magnitude == 2560:
             self.camera_model_label.setText("PCO Edge")
             self.connect_to_camera_status.setText("CONNECTED to PCO Edge")
             self.n_buffers_entry.setEnabled(True)
             self.live_on_button_stream2disk.setEnabled(True)
             self.live_on_stream_select_file_button.setEnabled(True)
+            self.camera.frame_grabber_ext_timeout = 10 * q.sec
+            self.viewer_highlim_entry.setText("110")
         ####################################
         # Hardcoding automode for now
         ####################################
@@ -666,6 +670,8 @@ class CameraControlsGroup(QGroupBox):
             if self.camera_model_label.text() == 'PCO Edge':
                 self.delay_entry.setText('{0:d}'.format(1000/self.get_fps_max_estimate()))
                 self.buffered_entry.setEnabled(True)
+                tmp = self.buffered_entry.findText("YES")
+                self.buffered_entry.setCurrentIndex(tmp)
                 self.n_buffers_entry.setEnabled(True)
             self.delay_entry.setEnabled(True)
 
