@@ -32,6 +32,7 @@ import time
 import argparse
 import os
 import numpy as np
+from datetime import date
 # Dark style
 # noinspection PyUnresolvedReferences
 from styles.breeze import styles_breeze
@@ -166,15 +167,25 @@ class GUI(QDialog):
         # finally
         self.set_layout()
 
+    def closeEvent(self, event):
+        if self.camera_controls_group.camera is not None:
+            if self.camera_controls_group.camera.state == 'recording':
+                self.camera_controls_group.camera.stop_recording()
+            self.camera_controls_group.camera.uca._unref()
+            del self.camera
 
     def login(self):
         login_dialog = Login(self.login_parameters)
         if login_dialog.exec_() != QDialog.Accepted:
             self.exit()
         else:
-            #info_message("Logged in {:}".format(self.login_parameters['expdir']))
             self.file_writer_group.root_dir_entry.setText(self.login_parameters['expdir'])
-            logfname = os.path.join(self.login_parameters['expdir'],'exp-log.log')
+            td = date.today()
+            tdstr = "{}.{}.{}".format(td.year, td.month, td.day)
+            logfname = os.path.join(self.login_parameters['expdir'],'exp-log-'+tdstr+'.log')
+            if self.login_parameters.has_key('project'):
+                logfname = os.path.join(self.login_parameters['expdir'],'{}-log-{}-{}.log'.
+                    format(self.login_parameters['project'], self.login_parameters['bl'], tdstr))
             try:
                 open(logfname, 'a').close()
             except:
@@ -243,6 +254,7 @@ class GUI(QDialog):
         self.ring_status_group.sync_daq_inj.stateChanged.connect(self.enable_sync_daq_ring)
         self.concert_scan.acq_setup.log = self.log
         self.camera_controls_group.log = self.log
+        self.concert_scan.log = self.log
 
     def ena_disa_all(self, val=True):
         self.motor_control_group.setEnabled(val)
@@ -251,6 +263,7 @@ class GUI(QDialog):
         self.file_writer_group.setEnabled(val)
         self.ring_status_group.setEnabled(val)
         self.exp_imp_button_grp.setEnabled(val)
+        self.scan_controls_group.ena_disa_all_entries(val)
 
     def get_outer_motor_grid(self):
         if self.scan_controls_group.outer_steps > 0:
@@ -273,7 +286,18 @@ class GUI(QDialog):
             error_message("Outer motor start/steps/range entered incorrectly ")
             self.abort()
 
+    def check_data_overwrite(self):
+        if self.file_writer_group.isChecked():
+            if os.path.exists(os.path.join( \
+                    self.file_writer_group.root_dir, \
+                    self.file_writer_group.ctsetname.format(1))):
+                warning_message("Output directory exists. \n"
+                                "Change root dir or name pattern"
+                                "and start again")
+                self.abort()
+
     def start(self):
+        #self.check_data_overwrite()
         if self.camera_controls_group.live_on or \
                 self.camera_controls_group.lv_stream2disk_on:
             self.camera_controls_group.live_off_func()
@@ -297,6 +321,20 @@ class GUI(QDialog):
     def move_to_start(self, begin_exp=True):
         # insert check large discrepancy between present position and start position
         self.log.info("Moving inner motor to starting point")
+
+        # workaround for EDC/Soloist problem -  won't move sometime after abort
+        # if position hasn't been change a tiny amount
+        if abs(self.motors[self.scan_controls_group.inner_motor].position.magnitude - \
+                self.scan_controls_group.inner_start) > 0.01:
+            self.log.debug("Tiny move to avoid bug with CT stage not moving")
+            self.motor_control_group.motion_CT = MotionThread(
+                self.motors[self.scan_controls_group.inner_motor],
+                self.motors[self.scan_controls_group.inner_motor].position.magnitude,
+                1, -1)
+            self.motor_control_group.motion_CT.start()
+            while self.motor_control_group.motion_CT.is_moving:
+                time.sleep(1)
+        # end of workaround for CT stage
 
         self.motor_control_group.motion_CT = MotionThread(
                     self.motors[self.scan_controls_group.inner_motor],
@@ -361,6 +399,7 @@ class GUI(QDialog):
                 self.motor_control_group.motion_vert = MotionThread(
                     self.motors[self.scan_controls_group.outer_motor],
                     self.outer_region[tmp])
+                self.motor_control_group.motion_vert.start()
                 self.motor_control_group.motion_vert.motion_over_signal.connect(self.doscan)
         else: # all scans done, finish the experiment
             # This section runs only if scan was finished normally, not aborted
@@ -453,7 +492,6 @@ class GUI(QDialog):
                                             self.file_writer_group.ctsetname,
                                             self.file_writer_group.separate_scans)
 
-
     def add_acquisitions_to_exp(self):
         self.log.info("adding acqusitions to concert experiment")
         self.concert_scan.remove_all_acqs()
@@ -491,17 +529,25 @@ class GUI(QDialog):
             self.concert_scan.attach_writer()
         self.concert_scan.attach_viewer()
 
+
+
     def abort(self):
         self.number_of_scans = 0
+        if self.camera_controls_group.camera.state == 'recording':
+            self.camera_controls_group.camera.stop_recording()
         self.gui_timer.stop()
         self.concert_scan.abort_scan()
         self.motor_control_group.stop_motors_func()
         self.motor_control_group.close_shutter_func()
+        # to stop libuca errors in case if ext trig + buff
+        if self.camera_controls_group.trig_mode == 'EXTERNAL':
+            self.log.debug("Workaround for libuca problem")
+            self.camera_controls_group.live_on_func()
+            self.camera_controls_group.live_off_func()
+        # finished workaround for libuca error spam
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
         self.return_button.setEnabled(True)
-        if self.camera_controls_group.camera.state == 'recording':
-            self.camera_controls_group.camera.stop_recording()
         self.scan_controls_group.setTitle(
             "Scan controls. Status: scan was aborted")
         self.ena_disa_all(True)
@@ -572,14 +618,55 @@ class GUI(QDialog):
         if f == '':
             warning_message('Select file')
             return
-
         params ={"Camera":
                     {'Model': self.camera_controls_group.camera_model_label.text(),
-                   'Trigger': self.camera_controls_group.trigger_entry.currentText()},\
+                     'External camera': self.camera_controls_group.ttl_scan.isChecked(),
+                     'Exposure time': self.camera_controls_group.exp_time,
+                     'Dead time': self.camera_controls_group.dead_time,
+                     'FPS': self.camera_controls_group.fps,
+                     'ROI first row': self.camera_controls_group.roi_x0,
+                     'ROI width': self.camera_controls_group.roi_width,
+                     'ROI first column': self.camera_controls_group.roi_y0,
+                     'ROI height': self.camera_controls_group.roi_height,
+                     'Buffered': self.camera_controls_group.buffered_entry.currentText(),
+                     'Number of buffers': self.camera_controls_group.buffnum,
+                     'Trigger': self.camera_controls_group.trig_mode,
+                     'Sensor clocking': self.camera_controls_group.sensor_pix_rate_entry.currentText(),
+                     'Time stamp': self.camera_controls_group.time_stamp.isChecked()},
+                 "Positions":
+                     {'CT stage': self.motor_control_group.CT_mot_pos_move.value(),
+                      'Vertical': self.motor_control_group.vert_mot_pos_move.value(),
+                      'Horizontal': self.motor_control_group.hor_mot_pos_move.value()},
                  "Outer loop":
-                  {'Motor': self.scan_controls_group.outer_loop_motor.currentText()},
+                  {'Motor': self.scan_controls_group.outer_loop_motor.currentText(),
+                   'Start': self.scan_controls_group.outer_loop_start_entry.text(),
+                   'Steps': self.scan_controls_group.outer_loop_steps_entry.text(),
+                   'Range': self.scan_controls_group.outer_loop_range_entry.text(),
+                   'Flats before': self.scan_controls_group.ffc_before_outer,
+                   'Flats after': self.scan_controls_group.ffc_after_outer},
+                 "Inner loop":
+                     {'Motor': self.scan_controls_group.inner_loop_motor.currentText(),
+                      'Start': self.scan_controls_group.inner_loop_start_entry.text(),
+                      'Steps': self.scan_controls_group.inner_loop_steps_entry.text(),
+                      'Range': self.scan_controls_group.inner_loop_range_entry.text(),
+                      'Flats before': self.scan_controls_group.ffc_before,
+                      'Flats after': self.scan_controls_group.ffc_after},
+                 "Readout in the end":
+                     {'Readout in the end': self.scan_controls_group.readout_intheend.isChecked()},
+                 "FFC":
+                     {'Motor': self.ffc_controls_group.flat_motor,
+                      'Radio position': self.ffc_controls_group.radio_position_entry.text(),
+                      'Flat position': self.ffc_controls_group.flat_position_entry.text(),
+                      'Num flats': self.ffc_controls_group.num_flats,
+                      'Num darks': self.ffc_controls_group.num_darks},
                  "Writer":
-                  {'Data dir': self.file_writer_group.root_dir_entry.text()}}
+                  {'Enabled': self.file_writer_group.isChecked(),
+                   'Data dir': self.file_writer_group.root_dir,
+                   'CT scan name': self.file_writer_group.ctsetname,
+                   'Filename': self.file_writer_group.dsetname,
+                   'Big tiffs': self.file_writer_group.bigtiff,
+                   'Separate scans': self.file_writer_group.separate_scans}
+            }
 
         def my_unicode_repr(data):
             return self.represent_str(data.encode('utf-8'))
@@ -602,19 +689,67 @@ class GUI(QDialog):
             p = yaml.load(f, Loader=yaml.FullLoader)
 
         if p['Camera']['Model'] != self.camera_controls_group.camera_model_label.text():
-            error_message('Param file is for different camera')
+            error_message('Selected params file is for different camera')
             return
 
         try: ####### CAMERA  #######
+            self.camera_controls_group.ttl_scan.setChecked(p['Camera']['External camera'])
+            self.camera_controls_group.exposure_entry.setText(str(p['Camera']['Exposure time']))
+            self.camera_controls_group.fps_entry.setText(str(p['Camera']['FPS']))
+            self.camera_controls_group.roi_y0_entry.setText(str(p['Camera']['ROI first column']))
+            self.camera_controls_group.roi_width_entry.setText(str(p['Camera']['ROI width']))
+            self.camera_controls_group.roi_x0_entry.setText(str(p['Camera']['ROI first row']))
+            self.camera_controls_group.roi_height_entry.setText(str(p['Camera']['ROI height']))
+            tmp = self.camera_controls_group.buffered_entry.findText(str(p['Camera']['Buffered']))
+            self.camera_controls_group.buffered_entry.setCurrentIndex(tmp)
+            self.camera_controls_group.n_buffers_entry.setText(str(p['Camera']['Number of buffers']))
             tmp = self.camera_controls_group.trigger_entry.findText(p['Camera']['Trigger'])
+            self.camera_controls_group.delay_entry.setText(str(p['Camera']['Dead time']))
             self.camera_controls_group.trigger_entry.setCurrentIndex(tmp)
+            tmp = self.camera_controls_group.sensor_pix_rate_entry.\
+                findText(p['Camera']['Sensor clocking'])
+            self.camera_controls_group.sensor_pix_rate_entry.setCurrentIndex(tmp)
+            self.camera_controls_group.time_stamp.setChecked(p['Camera']['Time stamp'])
         except:
-            warning_message('Cannot set all camera parameters correctly')
-
-        ###### FILE WRITER ########
-        self.file_writer_group.root_dir_entry.setText(p['Writer']['Data dir'])
-
-
+            warning_message('Cannot enter all camera parameters correctly')
+        try: ####### Scans' settings #######
+            tmp = self.scan_controls_group.outer_loop_motor.\
+                findText(p['Outer loop']['Motor'])
+            self.scan_controls_group.outer_loop_motor.setCurrentIndex(tmp)
+            self.scan_controls_group.outer_loop_start_entry.setText(str(p['Outer loop']['Start']))
+            self.scan_controls_group.outer_loop_steps_entry.setText(str(p['Outer loop']['Steps']))
+            self.scan_controls_group.outer_loop_range_entry.setText(str(p['Outer loop']['Range']))
+            self.scan_controls_group.outer_loop_flats_0.setChecked(p['Outer loop']['Flats before'])
+            self.scan_controls_group.outer_loop_flats_1.setChecked(p['Outer loop']['Flats after'])
+            tmp = self.scan_controls_group.inner_loop_motor. \
+                findText(p['Inner loop']['Motor'])
+            self.scan_controls_group.inner_loop_motor.setCurrentIndex(tmp)
+            self.scan_controls_group.inner_loop_start_entry.setText(str(p['Inner loop']['Start']))
+            self.scan_controls_group.inner_loop_steps_entry.setText(str(p['Inner loop']['Steps']))
+            self.scan_controls_group.inner_loop_range_entry.setText(str(p['Inner loop']['Range']))
+            self.scan_controls_group.inner_loop_flats_0.setChecked(p['Inner loop']['Flats before'])
+            self.scan_controls_group.inner_loop_flats_1.setChecked(p['Inner loop']['Flats after'])
+            self.scan_controls_group.readout_intheend.setChecked(p['Readout in the end']['Readout in the end'])
+        except:
+            warning_message('Cannot enter scan parameters correctly')
+        try:  ####### FFC settings #######
+            tmp = self.ffc_controls_group.motor_options_entry.findText(p['FFC']['Motor'])
+            self.ffc_controls_group.motor_options_entry.setCurrentIndex(tmp)
+            self.ffc_controls_group.radio_position_entry.setText(p['FFC']['Radio position'])
+            self.ffc_controls_group.flat_position_entry.setText(p['FFC']['Flat position'])
+            self.ffc_controls_group.numflats_entry.setText(str(p['FFC']['Num flats']))
+            self.ffc_controls_group.numdarks_entry.setText(str(p['FFC']['Num darks']))
+        except:
+            warning_message('Cannot enter flat-field parameters correctly')
+        try:  ##### FILE WRITER ########
+            self.file_writer_group.setChecked(p['Writer']['Enabled'])
+            self.file_writer_group.root_dir_entry.setText(p['Writer']['Data dir'])
+            self.file_writer_group.ctset_fmt_entry.setText(p['Writer']['CT scan name'])
+            self.file_writer_group.dsetname_entry.setText(p['Writer']['Filename'])
+            self.file_writer_group.bigtiff_checkbox.setChecked(p['Writer']['Big tiffs'])
+            self.file_writer_group.separate_scans_checkbox.setChecked(p['Writer']['Separate scans'])
+        except:
+            warning_message('Cannot enter file-writer settings correctly')
 
 if __name__ == '__main__':
     parsed_args, unparsed_args = process_cl_args()

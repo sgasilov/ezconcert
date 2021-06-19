@@ -9,15 +9,6 @@ from concert.experiments.base import Acquisition, Experiment
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal
 from concert.experiments.addons import Consumer, ImageWriter
 from message_dialog import info_message, error_message
-from edc import log
-
-LOG = log.get_module_logger(__name__)
-
-
-def run(n, callback):
-    for i in range(n):
-        callback(i)
-        sleep(0.5)
 
 
 class ConcertScanThread(QThread):
@@ -44,11 +35,13 @@ class ConcertScanThread(QThread):
         # before that all camera, acquisition, and ffc parameters must be set according to the
         # user input and consumers must be attached
         self.cons_viewer = None
+        self.walker = None
         self.cons_writer = None
         self.thread_running = True
         atexit.register(self.stop)
         self.starting_scan = False
         self.running_experiment = None
+        self.log = None
 
     def create_experiment(self, acquisitions, ctsetname, sep_scans):
         self.exp = Experiment(
@@ -84,6 +77,7 @@ class ConcertScanThread(QThread):
                     self.detach_and_del_writer()
                     self.scan_finished_signal.emit()
                     self.running_experiment = None
+                    self.log.debug("Experiment done in Concert thread")
             except:
                 pass
 
@@ -93,8 +87,9 @@ class ConcertScanThread(QThread):
     def abort_scan(self):
         try:
             self.exp.abort()
-            self.detach_and_clean()
+            self.delete_exp()
             self.running_experiment = None
+            self.log.debug("Abort scan executed correctly in Concert thread")
         except:
             pass
 
@@ -103,15 +98,13 @@ class ConcertScanThread(QThread):
             self.cons_writer.detach()
             del self.cons_writer
             self.cons_writer = None
-        # if self.cons_viewer is not None:
-        #     self.cons_viewer.detach()
-        #     del self.cons_viewer
-        #     self.cons_viewer = None
 
     def delete_exp(self):
         if self.exp is not None:
-            del self.walker
-        if self.exp is not None:
+            self.detach_and_del_writer()
+            if self.walker is not None:
+                del self.walker
+                self.walker = None
             del self.exp
             self.exp = None
 
@@ -121,6 +114,7 @@ class ConcertScanThread(QThread):
             return
         for a in self.exp.acquisitions:
             self.exp.remove(a)
+        self.log.debug("Cleaned the list of acqs in exp")
 
 class ACQsetup(object):
 
@@ -199,7 +193,7 @@ class ACQsetup(object):
 
     # Use software trigger
     def take_darks_softr(self):
-        LOG.info("Starting acquisition: darks")
+        self.log.info("Starting acquisition: darks")
         try:
             self.ffcsetup.close_shutter()
             sleep(1)  # to get rid of possible afterglow
@@ -209,10 +203,11 @@ class ACQsetup(object):
             if self.camera.state == "recording":
                 self.camera.stop_recording()
             self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+            self.camera.buffered = False
             self.camera.start_recording()
             sleep(0.01)
         except Exception as exp:
-            LOG.error(exp)
+            self.log.error(exp)
             info_message(
                 "Something is wrong with setting camera params for take_darks_softr"
             )
@@ -221,19 +216,20 @@ class ACQsetup(object):
                 self.camera.trigger()
                 yield self.camera.grab()
         except Exception as exp:
-            LOG.error(exp)
+            self.log.error(exp)
             info_message("Something is wrong in take_darks_softr")
         finally:
             self.camera.stop_recording()
-            LOG.info("Acquired darks")
+            self.log.info("Acquired darks")
 
     def take_flats_softr(self):
-        LOG.info("Starting acquisition: flats")
+        self.log.info("Starting acquisition: flats")
+        self.camera.buffered = False
         try:
             self.ffcsetup.prepare_flats()
             self.ffcsetup.open_shutter()
         except Exception as exp:
-            LOG.error(exp)
+            self.log.error(exp)
             info_message("Something is wrong in preparations for take_flats_softr")
         try:
             if self.camera.state == "recording":
@@ -242,7 +238,7 @@ class ACQsetup(object):
             self.camera.start_recording()
             sleep(0.01)
         except Exception as exp:
-            LOG.error(exp)
+            self.log.error(exp)
             info_message(
                 "Something is wrong with setting camera params in take_flats_softr"
             )
@@ -251,13 +247,13 @@ class ACQsetup(object):
                 self.camera.trigger()
                 yield self.camera.grab()
         except Exception as exp:
-            LOG.error(exp)
+            self.log.error(exp)
             info_message("Something is wrong during acquisition of flats")
         finally:
             self.camera.stop_recording()
             self.ffcsetup.close_shutter()
             self.ffcsetup.prepare_radios()
-            LOG.info("Acquired flats")
+            self.log.info("Acquired flats")
 
     def take_tomo_softr(self):
         """A generator which yields projections."""
@@ -272,6 +268,7 @@ class ACQsetup(object):
             if self.camera.state == "recording":
                 self.camera.stop_recording()
             self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
+            self.camera.buffered = False
             self.camera.start_recording()
             sleep(0.01)
         except Exception as exp:
@@ -321,6 +318,10 @@ class ACQsetup(object):
 
     def take_tomo_ext(self):
         self.log.info("Starting acquisition: on-the-fly scan, ext trig, libuca buffer")
+        if self.camera.state == "recording":
+            self.camera.stop_recording()
+
+        self.camera.buffered = True
         self.prep4ext_trig_scan_with_PSO()
         self.camera.start_recording()
         sleep(0.01)
@@ -339,6 +340,9 @@ class ACQsetup(object):
     def take_tomo_ext_dimax(self):
         """A generator which yields projections. """
         self.log.info("Starting acquisition: on-the-fly scan with Dimax, ext trig, int buffer")
+        if self.camera.state == "recording":
+            self.camera.stop_recording()
+        self.camera.buffered = False
         self.prep4ext_trig_scan_with_PSO()
         #rotation and recording
         try:
@@ -381,6 +385,7 @@ class ACQsetup(object):
             self.camera.stop_recording()
         if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
             self.camera.trigger_source = self.camera.trigger_sources.AUTO
+        self.camera.buffered = False
         try:
             self.ffcsetup.open_shutter()
         except Exception as exp:
@@ -452,7 +457,7 @@ class ACQsetup(object):
                 )
             ).join()
             self.motor["stepangle"].set(self.step).join()
-            self.motor.LENGTH = self.step * self.nsteps
+            self.motor.LENGTH = self.step * self.nsteps * 1.01 #overshooting a bit for the sake of stability
             self.log.debug(
                 "Velocity: {}, Step: {}, Range: {}".format(
                     self.motor.stepvelocity, self.motor.stepangle, self.motor.LENGTH
@@ -465,6 +470,8 @@ class ACQsetup(object):
             error_message(tmp)
 
     def return_ct_stage_to_start(self, block=True):
+        #self.motor["state"].wait("standby", sleep_time=10, timeout=10)
+        self.motor.wait_until_stop(timeout=0.5 * q.sec)
         try:
             self.log.debug("returning inner motor to start after acquisition")
             self.log.debug("change velocity")
@@ -481,7 +488,7 @@ class ACQsetup(object):
         except Exception as exp:
             self.log.error(exp)
             error_message(
-                "can't return CT stage to start position after auto scan"
+                "can't return CT stage to start position after on-the-fly scan"
             )
 
     #def stop_rotation_and_close_shutter(self):
