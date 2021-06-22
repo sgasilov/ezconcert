@@ -51,7 +51,7 @@ class ConcertScanThread(QThread):
             name_fmt=ctsetname,
         )
 
-    def attach_writer(self, async=True):
+    def attach_writer(self, async=False):
         self.cons_writer = ImageWriter(self.exp.acquisitions, self.walker, async=async)
 
     def attach_viewer(self):
@@ -86,7 +86,7 @@ class ConcertScanThread(QThread):
 
     def abort_scan(self):
         try:
-            self.exp.abort()
+            #self.exp.abort()
             self.delete_exp()
             self.running_experiment = None
             self.log.debug("Abort scan executed correctly in Concert thread")
@@ -100,6 +100,10 @@ class ConcertScanThread(QThread):
             self.cons_writer = None
 
     def delete_exp(self):
+        try:
+            self.exp.abort()
+        except:
+            pass
         if self.exp is not None:
             self.detach_and_del_writer()
             if self.walker is not None:
@@ -328,6 +332,10 @@ class ACQsetup(object):
         self.log.info("Sending PSO command")
         self.motor.PSO_multi(False)
         sleep(0.5) # EPICS delays? shouldn't matter for grab, but just in case
+        # sleep(2)
+        # self.motor.wait_until_stop(timeout=0.5 * q.sec)
+        # sleep(2)
+        # self.log.debug("** recieved {} triggers".format(self.camera.num_triggers))
         # read-out
         self.log.info("Starting read-out from libuca buffer")
         for i in range(self.nsteps):
@@ -490,23 +498,6 @@ class ACQsetup(object):
             error_message(
                 "can't return CT stage to start position after on-the-fly scan"
             )
-
-    #def stop_rotation_and_close_shutter(self):
-        #self.ffcsetup.close_shutter()
-        #self.motor.stop().join()
-        # the motor does not always move but moving a small amount first seems
-        # to result in the movement to the start position
-        # self.motor["stepvelocity"].set(self.motor.base_vel).join()
-        # self.log.debug("return to start")
-        # time.sleep(1)
-        # # the motor does not always move but moving a small amount first seems
-        # # to result in the movement to the start position
-        # self.motor["position"].set(self.motor.position + 0.1).join()
-        # self.motor["position"].set(self.glob_tmp).join()
-
-
-        # Q - if I stop recording can I continue to read-out? A - No
-
 
     # external camera control
     # Camera is completely external and this is only moving stages and sending triggers

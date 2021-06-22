@@ -341,14 +341,16 @@ class CameraControlsGroup(QGroupBox):
         self.connect_to_camera_status.setText("CONNECTING...")
         self.connect_to_camera_status.setStyleSheet("color: orange")
 
+        self.camera = None
         try:
             self.camera = UcaCamera('pcoclhs')
         except:
             self.on_camera_connect_failure()
-        # try:
-        #     self.camera = UcaCamera('pcoclhs')
-        # except:
-        #     self.on_camera_connect_failure()
+        # if self.camera is None:
+        #     try:
+        #         self.camera = UcaCamera('pcoclhs')
+        #     except:
+        #         self.on_camera_connect_failure()
 
         if self.camera is not None:
             self.on_camera_connect_success()

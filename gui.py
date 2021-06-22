@@ -329,8 +329,7 @@ class GUI(QDialog):
             self.log.debug("Tiny move to avoid bug with CT stage not moving")
             self.motor_control_group.motion_CT = MotionThread(
                 self.motors[self.scan_controls_group.inner_motor],
-                self.motors[self.scan_controls_group.inner_motor].position.magnitude,
-                1, -1)
+                self.motors[self.scan_controls_group.inner_motor].position.magnitude+2)
             self.motor_control_group.motion_CT.start()
             while self.motor_control_group.motion_CT.is_moving:
                 time.sleep(1)
@@ -533,18 +532,28 @@ class GUI(QDialog):
 
     def abort(self):
         self.number_of_scans = 0
-        if self.camera_controls_group.camera.state == 'recording':
-            self.camera_controls_group.camera.stop_recording()
         self.gui_timer.stop()
         self.concert_scan.abort_scan()
         self.motor_control_group.stop_motors_func()
         self.motor_control_group.close_shutter_func()
+        time.sleep(1)
+        if self.camera_controls_group.camera.state == 'recording':
+            self.camera_controls_group.camera.stop_recording()
         # to stop libuca errors in case if ext trig + buff
         if self.camera_controls_group.trig_mode == 'EXTERNAL':
             self.log.debug("Workaround for libuca problem")
+            try:
+                self.concert_scan.acq_setup.motor.PSO_ttl(10, 0.05).join()
+            except:
+                pass
             self.camera_controls_group.live_on_func()
             self.camera_controls_group.live_off_func()
         # finished workaround for libuca error spam
+        # plus to clear all possible fault states on CT stage
+        try:
+            self.concert_scan.acq_setup.motor.clear()
+        except:
+            pass
         self.start_button.setEnabled(True)
         self.abort_button.setEnabled(False)
         self.return_button.setEnabled(True)
