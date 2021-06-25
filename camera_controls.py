@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, \
 from message_dialog import info_message, error_message, warning_message
 
 from concert.devices.cameras.uca import Camera as UcaCamera
+from concert.devices.cameras.base import CameraError as CamError
 from concert.devices.cameras.dummy import Camera as DummyCamera
 from concert.quantities import q
 from concert.experiments.addons import Consumer, ImageWriter
@@ -23,6 +24,11 @@ from time import sleep
 import os
 
 
+# class Camera:
+#     def __init__(self, name):
+#         #if name != 'bar':
+#         self.name = name
+
 class CameraControlsGroup(QGroupBox):
     """
     Camera controls
@@ -35,6 +41,7 @@ class CameraControlsGroup(QGroupBox):
         self.timer = QTimer()
         self.camera = None
         self.log = None
+        self.plugin_names = ['pco', 'pcoclhs']
         
         # Buttons
         self.live_on_button = QPushButton("LIVE ON")
@@ -87,6 +94,9 @@ class CameraControlsGroup(QGroupBox):
         # Connect to camera
         self.connect_to_camera_button = QPushButton("Connect to camera")
         self.connect_to_camera_button.clicked.connect(self.connect_to_camera)
+        self.connect_to_camera_list = QComboBox()
+        self.connect_to_camera_list.addItems(["PCO Edge", "PCO Dimax", \
+                                              "PCO 4000", "Dummy (or external camera)"])
         self.connect_to_dummy_camera_button = QPushButton("Connect to dummy camera")
         self.connect_to_dummy_camera_button.clicked.connect(
             self.connect_to_dummy_camera)
@@ -100,7 +110,7 @@ class CameraControlsGroup(QGroupBox):
         self.live_on = False
 
         # external camera software switch
-        self.ttl_scan = QCheckBox("External camera controls")
+        self.ttl_scan = QCheckBox("Trigger external camera")
         self.ttl_scan.setChecked(False)
 
 
@@ -233,6 +243,8 @@ class CameraControlsGroup(QGroupBox):
         self.readout_thread.readout_over_signal.connect(self.readout_over_func)
         self.time_stamp.stateChanged.connect(self.set_time_stamp)
         self.trigger_entry.currentIndexChanged.connect(self.restrict_params_depending_on_trigger)
+        #self.roi_height_entry.editingFinished.connect(self.roi_y0)
+        #self.roi_width_entry.editingFinished.connect(self.roi_x0)
 
         self.all_cam_params_correct = True
         self.set_layout()
@@ -265,10 +277,11 @@ class CameraControlsGroup(QGroupBox):
 
         # Left column of controls
         layout.addWidget(self.connect_to_camera_button, 1, 0)
-        layout.addWidget(self.connect_to_camera_status, 1, 1)
+        #layout.addWidget(self.connect_to_camera_status, 1, 1)
+        layout.addWidget(self.connect_to_camera_list, 1, 1)
         #layout.addWidget(self.camera_model_label, 1, 2)
-        layout.addWidget(self.connect_to_dummy_camera_button, 1, 2)
-        layout.addWidget(self.ttl_scan, 1, 3)
+        #layout.addWidget(self.connect_to_dummy_camera_button, 1, 2)
+        layout.addWidget(self.ttl_scan, 1, 2)
         layout.addWidget(self.save_lv_sequence_button, 1, 4)
         layout.addWidget(self.abort_transfer_button, 1, 5)
 
@@ -340,12 +353,37 @@ class CameraControlsGroup(QGroupBox):
         """
         self.connect_to_camera_status.setText("CONNECTING...")
         self.connect_to_camera_status.setStyleSheet("color: orange")
+        if self.connect_to_camera_list.currentText() == "PCO Edge":
+            try:
+                self.camera = UcaCamera('pcoclhs')
+            except:
+                self.camera = None
+        elif self.connect_to_camera_list.currentText() == "PCO Dimax" or \
+                self.connect_to_camera_list.currentText() == "PCO 4000":
+            try:
+                self.camera = UcaCamera('pco')
+            except:
+                self.camera = None
+        elif self.connect_to_camera_list.currentText() == "Dummy (or external camera)":
+            self.connect_to_dummy_camera()
+            return
 
-        self.camera = None
-        try:
-            self.camera = UcaCamera('pcoclhs')
-        except:
-            self.on_camera_connect_failure()
+        # AUTOMATIC LOCATORS WON'T WORK - PRESUMABLY DUE TO LOWER LEVELS
+        # for plugin_name in self.plugin_names:
+        #     self.camera = None
+        #     self.log.debug('Connecting to camera, trying {}'.format(plugin_name))
+        #     try:
+        #         self.camera = UcaCamera(plugin_name)
+        #     except (RuntimeError, CamError):
+        #         self.log.debug('Not {}'.format(plugin_name))
+        #     else:
+        #         self.log.debug('Connected to camera with {}'.format(plugin_name))
+        #         break
+        # self.camera = None
+        # try:
+        #     self.camera = UcaCamera('pco')
+        # except:
+        #     self.on_camera_connect_failure()
         # if self.camera is None:
         #     try:
         #         self.camera = UcaCamera('pcoclhs')
@@ -354,12 +392,14 @@ class CameraControlsGroup(QGroupBox):
 
         if self.camera is not None:
             self.on_camera_connect_success()
+        else:
+            self.on_camera_connect_failure()
 
 
     def connect_to_dummy_camera(self):
         self.camera = DummyCamera()
-        self.connect_to_camera_status.setText("CONNECTED")
-        self.connect_to_camera_status.setStyleSheet("color: orange")
+        self.connect_to_camera_button.setText("CONNECTED")
+        self.connect_to_camera_button.setStyleSheet("color: orange")
         self.camera_model_label.setText("Dummy camera")
         self.exposure_entry.setText("{:.02f}".format(
             self.camera.exposure_time.magnitude * 1000))
@@ -381,10 +421,11 @@ class CameraControlsGroup(QGroupBox):
         :param camera: Camera object
         :return: None
         """
-        self.connect_to_camera_status.setText("CONNECTED")
-        self.connect_to_camera_status.setStyleSheet("color: green")
+        self.connect_to_camera_button.setText("CONNECTED")
+        self.connect_to_camera_button.setStyleSheet("color: green")
         self.connect_to_dummy_camera_button.setEnabled(False)
         self.connect_to_camera_button.setEnabled(False)
+        self.connect_to_camera_list.setEnabled(False)
         self.ttl_scan.setEnabled(False)
         # identify model
         # Dimax must use internal buffer, 4000 only soft trigger
@@ -685,7 +726,14 @@ class CameraControlsGroup(QGroupBox):
             self.save_lv_sequence_button.setEnabled(val)
         self.live_off_button.setEnabled(not val)
 
-        # getters/setters
+    # getters/setters
+    @property
+    def camera_model(self):
+        try:
+            return self.camera_model_label.text()
+        except:
+            pass
+
     @property
     def exp_time(self):
         try:

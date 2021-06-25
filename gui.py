@@ -146,7 +146,10 @@ class GUI(QDialog):
         self.scan_controls_group.inner_loop_steps_entry.editingFinished.connect(
             self.autoset_n_buffers)
         self.scan_controls_group.inner_loop_motor.currentIndexChanged.connect(
-            self.autoset_continious)
+            self.autoset_some_params_for_CTstage_motor)
+        self.camera_controls_group.trigger_entry.currentIndexChanged.connect(
+            self.enable_TTL_scan_if_Dimax_and_Ext_trig)
+
 
         # SAVE/LOAD params group
         self.QFD = QFileDialog()
@@ -168,7 +171,8 @@ class GUI(QDialog):
         self.set_layout()
 
     def closeEvent(self, event):
-        if self.camera_controls_group.camera is not None:
+        if self.camera_controls_group.camera is not None and \
+                self.camera_controls_group.camera_model != "Dummy camera":
             if self.camera_controls_group.camera.state == 'recording':
                 self.camera_controls_group.camera.stop_recording()
             self.camera_controls_group.camera.uca._unref()
@@ -199,6 +203,7 @@ class GUI(QDialog):
             self.motor_control_group.connect_vert_mot_button.animateClick()
             self.motor_control_group.connect_CT_mot_button.animateClick()
             self.motor_control_group.connect_shutter_button.animateClick()
+            self.camera_controls_group.log = self.log
 
     def exit(self):
         self.close()
@@ -253,7 +258,6 @@ class GUI(QDialog):
             self.send_inj_info_to_acqsetup)
         self.ring_status_group.sync_daq_inj.stateChanged.connect(self.enable_sync_daq_ring)
         self.concert_scan.acq_setup.log = self.log
-        self.camera_controls_group.log = self.log
         self.concert_scan.log = self.log
 
     def ena_disa_all(self, val=True):
@@ -285,6 +289,7 @@ class GUI(QDialog):
         else:
             error_message("Outer motor start/steps/range entered incorrectly ")
             self.abort()
+            return None
 
     def check_data_overwrite(self):
         if self.file_writer_group.isChecked():
@@ -295,28 +300,42 @@ class GUI(QDialog):
                                 "Change root dir or name pattern"
                                 "and start again")
                 self.abort()
+                return None
 
     def start(self):
+        self.ena_disa_all(False)
+        self.start_button.setEnabled(False)
+        self.abort_button.setEnabled(True)
+        self.return_button.setEnabled(False)
+        if self.scan_controls_group.delay_time == 0:
+            self.start_real()
+        elif self.scan_controls_group.delay_time > 0:
+            self.log.info("*** Delayed start")
+            self.scan_controls_group.setTitle("Scan controls. Status: waiting for delayed start")
+            self.gui_timer.singleShot(self.scan_controls_group.delay_time*60000, self.start_real)
+        else:
+            self.abort()
+
+    def start_real(self):
         #self.check_data_overwrite()
+        if self.check_discrepancy_starting_point():
+            return
         if self.camera_controls_group.live_on or \
                 self.camera_controls_group.lv_stream2disk_on:
             self.camera_controls_group.live_off_func()
         #if self.scan_controls_group.inner_loop_continuous:
         #    self.validate_velocity()
         self.log.info("***** EXPERIMENT STARTED *****")
-        self.ena_disa_all(False)
         time.sleep(0.5)
         self.number_of_scans = 1 # we expect to make at least one scan
-        self.start_button.setEnabled(False)
-        self.abort_button.setEnabled(True)
-        self.return_button.setEnabled(False)
         self.scan_controls_group.setTitle("Scan controls. Status: Experiment is running")
         self.set_scan_params()
         self.create_exp()
         if self.scan_controls_group.readout_intheend.isChecked():
             self.camera_controls_group.live_on_func_ext_trig()
         self.outer_region = self.get_outer_motor_grid()
-        self.move_to_start(begin_exp=True)
+        if self.outer_region is not None:
+            self.move_to_start(begin_exp=True)
 
     def move_to_start(self, begin_exp=True):
         # insert check large discrepancy between present position and start position
@@ -350,6 +369,23 @@ class GUI(QDialog):
         self.motor_control_group.motion_CT.start()
         self.motor_control_group.motion_vert.start()
 
+    def check_discrepancy_starting_point(self):
+        # required to make sure that stage doesn't make many revolutions
+        # in case if some cable/tubes are connected to sample
+        # also PSO is not stable beyond > 360
+        if self.scan_controls_group.inner_motor == 'CT stage [deg]':
+            if (self.camera_controls_group.trig_mode == "EXTERNAL" and \
+                    abs(self.motors[self.scan_controls_group.inner_motor].position.magnitude)>180) \
+                    or (abs(self.motors[self.scan_controls_group.inner_motor].position.magnitude - \
+                           self.scan_controls_group.inner_start)>180):
+                warning_message("CT stage needs to make more than half turn to go to start position \n"
+                                "Move it back to 0 (minus will move counter-clockwise) or home it (clockwise) \n"
+                                "Be extra careful if there are cables/pipes connected to sample! \n"
+                                )
+                self.log.info("Stage must be returned closer to start. Experiment aborted")
+                self.abort()
+                return True
+
     def begin_scans(self):
         if self.motor_control_group.motion_CT.is_moving or \
                     self.motor_control_group.motion_vert.is_moving:
@@ -365,21 +401,22 @@ class GUI(QDialog):
         # of acquisitions, flat-field correction, camera, consumers, etc based on the user input
         self.add_acquisitions_to_exp()
         # start actual Concert experiment in concert scan thread
-        if self.camera_controls_group.ttl_scan.isChecked() or \
-                    self.scan_controls_group.readout_intheend.isChecked():
-            if self.scan_controls_group.outer_steps > 0 and \
-                    self.number_of_scans == self.scan_controls_group.outer_steps and \
-                        self.scan_controls_group.ffc_before_outer:
-                self.concert_scan.acq_setup.take_ttl_tomo(1)
-            elif self.scan_controls_group.outer_steps > 0 and \
-                    self.number_of_scans == 1 and \
-                        self.scan_controls_group.ffc_after_outer:
-                self.concert_scan.acq_setup.take_ttl_tomo(2)
-            else:
-                self.concert_scan.acq_setup.take_ttl_tomo(0)
-            self.end_of_scan()
-        else:
-            self.concert_scan.start_scan()
+        # if self.camera_controls_group.ttl_scan.isChecked() or \
+        #             self.scan_controls_group.readout_intheend.isChecked():
+        #     if self.scan_controls_group.outer_steps > 0 and \
+        #             self.number_of_scans == self.scan_controls_group.outer_steps and \
+        #                 self.scan_controls_group.ffc_before_outer:
+        #         self.concert_scan.acq_setup.take_ttl_tomo(1)
+        #     elif self.scan_controls_group.outer_steps > 0 and \
+        #             self.number_of_scans == 1 and \
+        #                 self.scan_controls_group.ffc_after_outer:
+        #         self.concert_scan.acq_setup.take_ttl_tomo(2)
+        #     else:
+        #         self.concert_scan.acq_setup.take_ttl_tomo(0)
+        #     self.end_of_scan()
+        # else:
+        #     self.concert_scan.start_scan()
+        self.concert_scan.start_scan()
 
     def end_of_scan(self):
         # in the end of scan next outer loop step is made if applicable
@@ -468,15 +505,16 @@ class GUI(QDialog):
                 error_message("Select flat field motor and define parameters correctly")
                 problem_with_params = True
         if problem_with_params:
-            self.number_of_scans = 0
-            self.end_of_scan()
+            self.abort()
 
     def create_exp(self):
         self.log.info("creating concert experiment")
         acquisitions = []
         #**********CREATE EXPERIMENT AND ATTACH CONSUMERS
         # CREATE NEW WALKER
-        if self.file_writer_group.isChecked():
+        if self.file_writer_group.isChecked() and \
+                not (self.camera_controls_group.ttl_scan.isChecked() or \
+                    self.scan_controls_group.readout_intheend.isChecked()):
             bpf = 0
             if self.file_writer_group.bigtiff:
                 bpf = 2**37
@@ -494,6 +532,26 @@ class GUI(QDialog):
     def add_acquisitions_to_exp(self):
         self.log.info("adding acqusitions to concert experiment")
         self.concert_scan.remove_all_acqs()
+        # ttl scan - no consumers, no nothing.
+        if self.camera_controls_group.ttl_scan.isChecked() or \
+                    self.scan_controls_group.readout_intheend.isChecked():
+            if (self.scan_controls_group.outer_steps > 0 and \
+                        self.number_of_scans == self.scan_controls_group.outer_steps and \
+                            self.scan_controls_group.ffc_before_outer) or \
+                                self.scan_controls_group.ffc_before:
+                self.concert_scan.acq_setup.ttl_ffc_swi = 1
+                self.concert_scan.exp.add(self.concert_scan.acq_setup.ttl_acq)
+            elif (self.scan_controls_group.outer_steps > 0 and \
+                    self.number_of_scans == 1 and \
+                        self.scan_controls_group.ffc_after_outer) or \
+                                self.scan_controls_group.ffc_after:
+                self.concert_scan.acq_setup.ttl_ffc_swi = 2
+                self.concert_scan.exp.add(self.concert_scan.acq_setup.ttl_acq)
+            else:
+                self.concert_scan.acq_setup.ttl_ffc_swi = 0
+                self.concert_scan.exp.add(self.concert_scan.acq_setup.ttl_acq)
+            return
+        # ordinary concert experiments with yielding acquisitions and consumers
         # ffc before
         if self.scan_controls_group.ffc_before or \
                 (self.scan_controls_group.ffc_before_outer and \
@@ -528,8 +586,6 @@ class GUI(QDialog):
             self.concert_scan.attach_writer()
         self.concert_scan.attach_viewer()
 
-
-
     def abort(self):
         self.number_of_scans = 0
         self.gui_timer.stop()
@@ -539,8 +595,9 @@ class GUI(QDialog):
         time.sleep(1)
         if self.camera_controls_group.camera.state == 'recording':
             self.camera_controls_group.camera.stop_recording()
-        # to stop libuca errors in case if ext trig + buff
-        if self.camera_controls_group.trig_mode == 'EXTERNAL':
+        # to stop libuca errors in case if pcoclhs + ext trig + buff
+        if self.camera_controls_group.trig_mode == 'EXTERNAL' and \
+                self.camera_controls_group.camera_model_label.text() == 'PCO Edge':
             self.log.debug("Workaround for libuca problem")
             try:
                 self.concert_scan.acq_setup.motor.PSO_ttl(10, 0.05).join()
@@ -578,11 +635,22 @@ class GUI(QDialog):
             self.camera_controls_group.n_buffers_entry.setText(\
                 "{:}".format(self.scan_controls_group.inner_loop_steps_entry.text()))
 
-    def autoset_continious(self):
+    def autoset_some_params_for_CTstage_motor(self):
         if self.scan_controls_group.inner_loop_motor.currentText() != 'CT stage [deg]':
             self.scan_controls_group.inner_loop_continuous.setChecked(False)
+            self.scan_controls_group.inner_loop_start_entry.setDisabled(False)
         else:
             self.scan_controls_group.inner_loop_continuous.setChecked(True)
+            if self.camera_controls_group.trig_mode == "EXTERNAL":
+                self.scan_controls_group.inner_loop_start_entry.setText('0.0')
+                self.scan_controls_group.inner_loop_start_entry.setDisabled(True)
+
+    def enable_TTL_scan_if_Dimax_and_Ext_trig(self):
+        if self.camera_controls_group.trig_mode == "EXTERNAL" and \
+                self.camera_controls_group.camera_model_label.text() == "PCO Dimax":
+            self.scan_controls_group.readout_intheend.setEnabled(True)
+        else:
+            self.scan_controls_group.readout_intheend.setEnabled(False)
 
 
     def validate_velocity(self):

@@ -43,7 +43,6 @@ class ScanControlsGroup(QGroupBox):
         self.flats1_label.setText("FLATS")
         self.continuous_label = QLabel()
         self.continuous_label.setText("MOTION")
-        self.readout_intheend = QCheckBox("Accumulate frames and readout in the end")
 
         # Outer loop
         self.outer_loop_label = QLabel()
@@ -79,9 +78,19 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_continuous.setChecked(True)
         self.inner_loop_continuous.setEnabled(False)
 
-        # TTL
-        self.ttl_scan = QCheckBox("TTL scan")
-        self.ttl_scan.setChecked(False)
+        # OPTIONAL, BOTTOM LINE
+        #TTL with Dimax
+        self.DimaxAccuTTLsLabel = QLabel()
+        self.DimaxAccuTTLsLabel.setText("For Dimax only")
+        self.readout_intheend = QCheckBox("Readout in the end")
+        self.readout_intheend.setEnabled(False)
+
+        # delayed start
+        self.delay_start_label = QLabel()
+        self.delay_start_label.setText("Delay exp. start by [min]")
+        self.delay_start_entry = QLineEdit()
+        self.delay_start_entry.setText('0')
+        self.delay_start_entry.setFixedWidth(25)
 
         #signals
         self.outer_loop_flats_0.stateChanged.connect(self.constrain_flats_before)
@@ -94,7 +103,9 @@ class ScanControlsGroup(QGroupBox):
         layout.addWidget(self.start_button, 0, 0, 1, 2)
         layout.addWidget(self.abort_button, 0, 2, 1, 2)
         layout.addWidget(self.return_button, 0, 4, 1, 2)
-        layout.addWidget(self.readout_intheend, 0, 7, 1, 2)
+        layout.addWidget(self.delay_start_label, 0, 6)
+        layout.addWidget(self.delay_start_entry, 0, 7)
+        layout.addWidget(self.readout_intheend, 0, 8)
 
         # Top labels
         layout.addWidget(self.motor_label, 1, 1)
@@ -147,6 +158,18 @@ class ScanControlsGroup(QGroupBox):
             self.inner_loop_flats_1.setEnabled(False)
         else:
             self.inner_loop_flats_1.setEnabled(True)
+
+    @property
+    def delay_time(self):
+        try:
+            x = int(self.delay_start_entry.text())
+        except ValueError:
+            error_message("Delay start time must be non-negative integer number")
+            return None
+        if x < 0:
+            error_message("Delay start time must be non-negative integer number")
+            return None
+        return x
 
     # INNER LOOP
     @property
@@ -261,6 +284,7 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_range_entry.setEnabled(v)
         self.inner_loop_endpoint.setEnabled(v)
         self.inner_loop_flats_1.setEnabled(v)
+        self.delay_start_entry.setEnabled(v)
         #self.inner_loop_continuous.setEnabled(v)
         
         

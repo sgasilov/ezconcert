@@ -96,7 +96,7 @@ class ConcertScanThread(QThread):
     def detach_and_del_writer(self):
         if self.cons_writer is not None:
             self.cons_writer.detach()
-            del self.cons_writer
+            #del self.cons_writer
             self.cons_writer = None
 
     def delete_exp(self):
@@ -107,9 +107,9 @@ class ConcertScanThread(QThread):
         if self.exp is not None:
             self.detach_and_del_writer()
             if self.walker is not None:
-                del self.walker
+                #del self.walker
                 self.walker = None
-            del self.exp
+            #del self.exp
             self.exp = None
 
 
@@ -169,6 +169,7 @@ class ACQsetup(object):
         self.rec_seq_with_inj_sync = Acquisition("seq", self.test_rec_seq_with_sync)
         # pulses only to external camera
         self.ttl_acq = Acquisition("ttl", self.take_ttl_tomo)
+        self.ttl_ffc_swi = 0
         #
 
         self.exp = None
@@ -332,11 +333,6 @@ class ACQsetup(object):
         self.log.info("Sending PSO command")
         self.motor.PSO_multi(False)
         sleep(0.5) # EPICS delays? shouldn't matter for grab, but just in case
-        # sleep(2)
-        # self.motor.wait_until_stop(timeout=0.5 * q.sec)
-        # sleep(2)
-        # self.log.debug("** recieved {} triggers".format(self.camera.num_triggers))
-        # read-out
         self.log.info("Starting read-out from libuca buffer")
         for i in range(self.nsteps):
             yield self.camera.grab()
@@ -501,7 +497,7 @@ class ACQsetup(object):
 
     # external camera control
     # Camera is completely external and this is only moving stages and sending triggers
-    def take_ttl_tomo(self, swi):
+    def take_ttl_tomo(self):
         """Scan using triggers to camera. The camera is assumed to be controlled externally"""
         self.log.info("start TTL scan")
         # set param
@@ -513,7 +509,7 @@ class ACQsetup(object):
             self.log.error(mesg)
             return
         try:
-            if self.flats_before or swi==1:
+            if self.flats_before or self.ttl_ffc_swi == 1:
                 self.log.debug("Take flats before.")
                 self.ffcsetup.prepare_flats(True)
                 self.ffcsetup.open_shutter(True)
@@ -567,7 +563,7 @@ class ACQsetup(object):
             self.log.error("Problem with Tomo: {}".format(exp))
         # flats after
         try:
-            if self.flats_after or swi==2:
+            if self.flats_after or self.ttl_ffc_swi == 2:
                 self.log.debug("Take flats after.")
                 self.ffcsetup.prepare_flats(True)
                 self.ffcsetup.open_shutter(True)
@@ -577,6 +573,7 @@ class ACQsetup(object):
                 self.ffcsetup.prepare_radios(True)
         except Exception as exp:
             self.log.error("Problem with Flat After: {}".format(exp))
+        yield 0 # to avoid errors from exp - doesn't see any generators?
         try:
             self.log.debug("Return to start")
             self.motor["stepvelocity"].set(20.0 * q.deg / q.sec)
