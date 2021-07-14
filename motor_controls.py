@@ -100,12 +100,18 @@ class MotorsControlsGroup(QGroupBox):
         # position indicators
         self.hor_mot_value = QLabel()
         self.hor_mot_value.setText("Disconnected")
+        self.hor_mot_low_lim = QLabel()
+        self.hor_mot_high_lim = QLabel()
         # self.hor_mot_pos_entry = QLabel()
         self.vert_mot_value = QLabel()
         self.vert_mot_value.setText("Disconnected")
+        self.vert_mot_low_lim = QLabel()
+        self.vert_mot_high_lim = QLabel()
         # self.vert_mot_pos_entry = QLabel()
         self.CT_mot_value = QLabel()
         self.CT_mot_value.setText("Disconnected")
+        self.CT_mot_low_lim = QLabel()
+        self.CT_mot_high_lim = QLabel()
         # self.CT_mot_pos_entry = QLabel()
         self.shutter_status = QLabel()
         self.shutter_status.setText("Disconnected")
@@ -261,7 +267,9 @@ class MotorsControlsGroup(QGroupBox):
         layout.addWidget(self.move_vert_mot_button, 2, 10)
         layout.addWidget(self.move_vert_rel_plus, 3, 10)
         layout.addWidget(self.move_vert_rel_minus, 3, 8)
+        layout.addWidget(self.vert_mot_low_lim, 1, 8)
         layout.addWidget(self.vert_mot_value, 1, 9)
+        layout.addWidget(self.vert_mot_high_lim, 1, 10)
         layout.addWidget(self.vert_mot_pos_move, 2, 9)
         layout.addWidget(self.vert_mot_rel_move, 3, 9)
         # horizontal
@@ -270,7 +278,9 @@ class MotorsControlsGroup(QGroupBox):
         layout.addWidget(self.move_hor_mot_button, 2, 14)
         layout.addWidget(self.move_hor_rel_plus, 3, 14)
         layout.addWidget(self.move_hor_rel_minus, 3, 12)
+        layout.addWidget(self.hor_mot_low_lim, 1, 12)
         layout.addWidget(self.hor_mot_value, 1, 13)
+        layout.addWidget(self.hor_mot_high_lim, 1, 14)
         layout.addWidget(self.hor_mot_pos_move, 2, 13)
         layout.addWidget(self.hor_mot_rel_move, 3, 13)
         # shutter
@@ -304,6 +314,8 @@ class MotorsControlsGroup(QGroupBox):
                 self.hor_mot_value.setText
             )
             self.hor_mot_monitor.i0.run_callback(self.hor_mot_monitor.call_idx)
+            self.hor_mot_low_lim.setText("Min {}".format(0))
+            self.hor_mot_high_lim.setText("Max {}".format(100))
 
     def connect_vert_motor_func(self):
         """Connect to vertical stage motor."""
@@ -322,6 +334,8 @@ class MotorsControlsGroup(QGroupBox):
                 self.vert_mot_value.setText
             )
             self.vert_mot_monitor.i0.run_callback(self.vert_mot_monitor.call_idx)
+            self.vert_mot_low_lim.setText("Min {} ".format(0))
+            self.vert_mot_high_lim.setText("Max {}".format(40))
 
     def connect_CT_motor_func(self):
         """Connect to CT stage.

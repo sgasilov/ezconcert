@@ -368,28 +368,6 @@ class CameraControlsGroup(QGroupBox):
             self.connect_to_dummy_camera()
             return
 
-        # AUTOMATIC LOCATORS WON'T WORK - PRESUMABLY DUE TO LOWER LEVELS
-        # for plugin_name in self.plugin_names:
-        #     self.camera = None
-        #     self.log.debug('Connecting to camera, trying {}'.format(plugin_name))
-        #     try:
-        #         self.camera = UcaCamera(plugin_name)
-        #     except (RuntimeError, CamError):
-        #         self.log.debug('Not {}'.format(plugin_name))
-        #     else:
-        #         self.log.debug('Connected to camera with {}'.format(plugin_name))
-        #         break
-        # self.camera = None
-        # try:
-        #     self.camera = UcaCamera('pco')
-        # except:
-        #     self.on_camera_connect_failure()
-        # if self.camera is None:
-        #     try:
-        #         self.camera = UcaCamera('pcoclhs')
-        #     except:
-        #         self.on_camera_connect_failure()
-
         if self.camera is not None:
             self.on_camera_connect_success()
         else:
@@ -507,7 +485,7 @@ class CameraControlsGroup(QGroupBox):
         self.camera = None
         self.camera_model_label.setText("")
 
-    def set_camera_params(self):
+    def set_camera_params(self, buff=None):
         self.log.info("Setting camera parameters")
         if self.camera_model_label.text() == 'Dummy camera':
             return -1
@@ -519,7 +497,10 @@ class CameraControlsGroup(QGroupBox):
                 self.camera.frame_rate = self.fps * q.hertz
             else:
                 self.camera.sensor_pixelrate = int(self.sensor_pix_rate_entry.currentText())
-            self.camera.buffered = self.buffered
+            if buff is None:
+                self.camera.buffered = self.buffered
+            else:
+                self.camera.buffered = buff
             if self.camera.buffered:
                 self.camera.num_buffers = self.buffnum
             self.set_time_stamp()
@@ -557,7 +538,7 @@ class CameraControlsGroup(QGroupBox):
         else:
             if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
                 self.camera.trigger_source = self.camera.trigger_sources.AUTO
-        self.set_camera_params()
+        self.set_camera_params(buff=False)
         self.camera.start_recording()
         self.live_preview_thread.live_on = True
         self.lv_duration = time.time()
@@ -596,7 +577,7 @@ class CameraControlsGroup(QGroupBox):
             self.camera.stop_recording()
         if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
             self.camera.trigger_source = self.camera.trigger_sources.AUTO
-        self.set_camera_params()
+        self.set_camera_params(buff=False)
         try:
             self.camera.start_recording()
             while self.lv_stream2disk_on:
@@ -673,19 +654,24 @@ class CameraControlsGroup(QGroupBox):
         self.last_dir = os.path.dirname(fname)
         tmp = False
         if self.live_preview_thread.live_on == True:
-            self.live_off_func()
-            tmp = True
+            #self.live_off_func()
+            im = self.camera.grab()
+            write_tiff(fname, im)
+            # tmp = True
+            self.save_one_image_button.setEnabled(True)
+            return
         if self.camera_model_label.text() != 'Dummy camera':
             if self.camera.state == 'recording':
                 self.camera.stop_recording()
             self.camera['trigger_source'].stash().join()
             self.camera.trigger_source = self.camera.trigger_sources.SOFTWARE
-        self.set_camera_params()
+        self.set_camera_params(buff=False)
         try:
             if self.camera_model_label.text() != 'Dummy camera':
                 with self.camera.recording():
                     self.camera.trigger()
                     im = self.camera.grab()
+                    self.viewer.show(im)
             else:
                 im = self.camera.grab()
         finally:
@@ -693,8 +679,8 @@ class CameraControlsGroup(QGroupBox):
             if self.camera_model_label.text() != 'Dummy camera':
                 self.camera['trigger_source'].restore().join()
             self.save_one_image_button.setEnabled(True)
-        if tmp == True:
-            self.live_on_func()
+        #if tmp == True:
+        #    self.live_on_func()
 
     def restrict_params_depending_on_trigger(self):
         self.delay_entry.setText('0')

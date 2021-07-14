@@ -7,7 +7,8 @@ from time import sleep
 from concert.quantities import q
 from concert.experiments.base import Acquisition, Experiment
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal
-from concert.experiments.addons import Consumer, ImageWriter
+from concert.experiments.addons import Consumer, ImageWriter, OnlineReconstruction
+from concert.ext.ufo import (GeneralBackprojectArgs, GeneralBackprojectManager)
 from message_dialog import info_message, error_message
 
 
@@ -42,6 +43,11 @@ class ConcertScanThread(QThread):
         self.starting_scan = False
         self.running_experiment = None
         self.log = None
+        #online reconstruction
+        self.args = None
+        self.reco = None
+        self.manager = None
+
 
     def create_experiment(self, acquisitions, ctsetname, sep_scans):
         self.exp = Experiment(
@@ -111,7 +117,9 @@ class ConcertScanThread(QThread):
                 self.walker = None
             #del self.exp
             self.exp = None
-
+            self.args = None
+            self.reco = None
+            self.manager = None
 
     def remove_all_acqs(self):
         if self.exp is None:
@@ -119,6 +127,19 @@ class ConcertScanThread(QThread):
         for a in self.exp.acquisitions:
             self.exp.remove(a)
         self.log.debug("Cleaned the list of acqs in exp")
+
+    def attach_online_reco(self):
+        # Manager stores projections, can find axis and so on...
+        if self.args is None:
+            error_message('Args for online reconstruction not set')
+            return
+        self.manager = GeneralBackprojectManager(self.args)
+        # This is the addon
+        self.reco = OnlineReconstruction(self.exp, self.args,
+                            consumer=self.viewer(), process_normalization=True)
+        self.reco.manager.copy_inputs = True
+        self.reco.manager.projection_sleep_time = 0 * q.s
+        self.reco.walker = self.walker
 
 class ACQsetup(object):
 
@@ -161,9 +182,11 @@ class ACQsetup(object):
         self.radio_timelaps = Acquisition("radio", self.take_softr_timelaps)
         # auto
         self.tomo_auto_dimax = Acquisition("tomo", self.take_tomo_auto_dimax)
-        self.tomo_auto = Acquisition("tomo", self.take_tomo_auto)
+        #self.tomo_auto = Acquisition("tomo", self.take_tomo_auto)
+        self.tomo_auto = Acquisition("radios", self.take_tomo_auto)
         # external
-        self.tomo_ext = Acquisition("tomo", self.take_tomo_ext)
+        #self.tomo_ext = Acquisition("tomo", self.take_tomo_ext)
+        self.tomo_ext = Acquisition("radios", self.take_tomo_ext)
         self.tomo_ext_dimax = Acquisition("tomo", self.take_tomo_ext_dimax)
         # tests of sync with top-up inj cycles
         self.rec_seq_with_inj_sync = Acquisition("seq", self.test_rec_seq_with_sync)

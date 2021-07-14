@@ -111,6 +111,7 @@ class GUI(QDialog):
         self.scan_controls_group.setEnabled(False)
         self.reco_settings_group = RecoSettingsGroup(title="On-the-fly reconstruction")
         self.reco_settings_group.setEnabled(False)
+        self.reco_enabled = False
 
         # MOTORS
         # dictionary with references to all connected physical devices and their labels
@@ -149,6 +150,7 @@ class GUI(QDialog):
             self.autoset_some_params_for_CTstage_motor)
         self.camera_controls_group.trigger_entry.currentIndexChanged.connect(
             self.enable_TTL_scan_if_Dimax_and_Ext_trig)
+        self.reco_settings_group.toggled.connect(self.change_reco_enabled_flag)
 
 
         # SAVE/LOAD params group
@@ -216,7 +218,7 @@ class GUI(QDialog):
         main_layout.addWidget(self.scan_controls_group)
         main_layout.addWidget(self.ffc_controls_group)
         main_layout.addWidget(self.file_writer_group)
-        # main_layout.addWidget(self.reco_settings_group)
+        main_layout.addWidget(self.reco_settings_group)
         main_layout.addWidget(self.ring_status_group)
         self.setLayout(main_layout)
 
@@ -254,6 +256,7 @@ class GUI(QDialog):
         self.ffc_controls_group.setEnabled(True)
         self.file_writer_group.setEnabled(True)
         self.exp_imp_button_grp.setEnabled(True)
+        self.reco_settings_group.setEnabled(True)
         self.ring_status_group.status_monitor.i0_state_changed_signal2.connect(
             self.send_inj_info_to_acqsetup)
         self.ring_status_group.sync_daq_inj.stateChanged.connect(self.enable_sync_daq_ring)
@@ -263,11 +266,15 @@ class GUI(QDialog):
     def ena_disa_all(self, val=True):
         self.motor_control_group.setEnabled(val)
         self.camera_controls_group.setEnabled(val)
+        self.camera_controls_group.viewer_lowlim_entry.setEnabled(True)
+        self.camera_controls_group.viewer_highlim_entry.setEnabled(True)
         self.ffc_controls_group.setEnabled(val)
         self.file_writer_group.setEnabled(val)
         self.ring_status_group.setEnabled(val)
         self.exp_imp_button_grp.setEnabled(val)
         self.scan_controls_group.ena_disa_all_entries(val)
+        if self.reco_enabled:
+            self.scan_controls_group.setEnabled(val)
 
     def get_outer_motor_grid(self):
         if self.scan_controls_group.outer_steps > 0:
@@ -318,6 +325,7 @@ class GUI(QDialog):
 
     def start_real(self):
         #self.check_data_overwrite()
+        self.auto_set_buffers_ext_edge()
         if self.check_discrepancy_starting_point():
             return
         if self.camera_controls_group.live_on or \
@@ -400,22 +408,6 @@ class GUI(QDialog):
         # before starting scan we have to create new experiment and update parameters
         # of acquisitions, flat-field correction, camera, consumers, etc based on the user input
         self.add_acquisitions_to_exp()
-        # start actual Concert experiment in concert scan thread
-        # if self.camera_controls_group.ttl_scan.isChecked() or \
-        #             self.scan_controls_group.readout_intheend.isChecked():
-        #     if self.scan_controls_group.outer_steps > 0 and \
-        #             self.number_of_scans == self.scan_controls_group.outer_steps and \
-        #                 self.scan_controls_group.ffc_before_outer:
-        #         self.concert_scan.acq_setup.take_ttl_tomo(1)
-        #     elif self.scan_controls_group.outer_steps > 0 and \
-        #             self.number_of_scans == 1 and \
-        #                 self.scan_controls_group.ffc_after_outer:
-        #         self.concert_scan.acq_setup.take_ttl_tomo(2)
-        #     else:
-        #         self.concert_scan.acq_setup.take_ttl_tomo(0)
-        #     self.end_of_scan()
-        # else:
-        #     self.concert_scan.start_scan()
         self.concert_scan.start_scan()
 
     def end_of_scan(self):
@@ -528,11 +520,22 @@ class GUI(QDialog):
         self.concert_scan.create_experiment(acquisitions,
                                             self.file_writer_group.ctsetname,
                                             self.file_writer_group.separate_scans)
+        if self.reco_enabled:
+            try:
+                self.reco_settings_group.set_args(
+                    self.camera_controls_group.roi_height//2,
+                    self.scan_controls_group.inner_steps,
+                    self.scan_controls_group.inner_range
+                )
+            except:
+                self.abort()
+            self.concert_scan.args = self.reco_settings_group.args
+
 
     def add_acquisitions_to_exp(self):
         self.log.info("adding acqusitions to concert experiment")
         self.concert_scan.remove_all_acqs()
-        # ttl scan - no consumers, no nothing.
+        # ttl scan - no consumers, only trigger to camera controlled externally
         if self.camera_controls_group.ttl_scan.isChecked() or \
                     self.scan_controls_group.readout_intheend.isChecked():
             if (self.scan_controls_group.outer_steps > 0 and \
@@ -584,7 +587,13 @@ class GUI(QDialog):
         # ATTACH CONSUMERS
         if self.file_writer_group.isChecked():
             self.concert_scan.attach_writer()
+        #if not self.reco_enabled:
+        #    self.concert_scan.attach_viewer()
+        #else:
         self.concert_scan.attach_viewer()
+        if self.reco_enabled:
+            self.log.info("Attaching online reco add on")
+            self.concert_scan.attach_online_reco()
 
     def abort(self):
         self.number_of_scans = 0
@@ -625,8 +634,8 @@ class GUI(QDialog):
 
     def set_viewer_limits(self):
         self.camera_controls_group.viewer.limits = \
-            [int(self.camera_controls_group.viewer_lowlim_entry.text()),
-             int(self.camera_controls_group.viewer_highlim_entry.text())]
+            [float(self.camera_controls_group.viewer_lowlim_entry.text()),
+             float(self.camera_controls_group.viewer_highlim_entry.text())]
 
     def autoset_n_buffers(self):
         if self.camera_controls_group.buffered_entry.currentText() == "YES" and \
@@ -687,6 +696,20 @@ class GUI(QDialog):
         self.log = self._log.get_module_logger(__name__)
 
         return
+
+    def change_reco_enabled_flag(self):
+        if self.reco_settings_group.isChecked():
+            self.reco_enabled = True
+            self.log.info("reco_enabled = True")
+        else:
+            self.reco_enabled = False
+            self.log.info("Reco_group unchecked reco_enabled = False")
+
+    def auto_set_buffers_ext_edge(self):
+        if self.camera_controls_group.trig_mode == "EXTERNAL" and \
+                self.camera_controls_group.camera_model == "PCO Edge":
+            self.camera_controls_group.n_buffers_entry.setText(
+                str(self.scan_controls_group.inner_steps))
 
     def dump2yaml(self):
 

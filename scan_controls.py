@@ -32,9 +32,9 @@ class ScanControlsGroup(QGroupBox):
         self.flats0_label = QLabel()
         self.flats0_label.setText("FLATS")
         self.start_label = QLabel()
-        self.start_label.setText("START")
+        self.start_label.setText("START POSITION")
         self.steps_label = QLabel()
-        self.steps_label.setText("NUM POINTS")
+        self.steps_label.setText("NUMBER OF STEPS")
         self.range_label = QLabel()
         self.range_label.setText("RANGE")
         self.endpoint_label = QLabel()
@@ -165,10 +165,10 @@ class ScanControlsGroup(QGroupBox):
             x = int(self.delay_start_entry.text())
         except ValueError:
             error_message("Delay start time must be non-negative integer number")
-            return None
+            return -1
         if x < 0:
-            error_message("Delay start time must be non-negative integer number")
-            return None
+            error_message("Delay start time must be non-negative integer number.")
+            return -1
         return x
 
     # INNER LOOP
