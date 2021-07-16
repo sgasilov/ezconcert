@@ -150,12 +150,16 @@ class GUI(QDialog):
             self.autoset_some_params_for_CTstage_motor)
         self.camera_controls_group.trigger_entry.currentIndexChanged.connect(
             self.enable_TTL_scan_if_Dimax_and_Ext_trig)
+        self.camera_controls_group.live_on_button.clicked.connect(
+            self.lv_timer_func)
+        self.camera_controls_group.live_off_button.clicked.connect(
+            self.lv_timer_stop_func)
         #self.reco_settings_group.toggled.connect(self.change_reco_enabled_flag)
 
 
         # SAVE/LOAD params group
         self.QFD = QFileDialog()
-        self.exp_imp_button_grp = QGroupBox(title='Save/load params')
+        self.exp_imp_button_grp = QGroupBox(title='Various')
         self.button_save_params = QPushButton("Export settings and params to file")
         self.button_load_params = QPushButton("Read settings and params from file")
         self.button_log_file = QPushButton("Select log file")
@@ -164,6 +168,7 @@ class GUI(QDialog):
         self.button_log_file.clicked.connect(self.select_log_file_func)
         self.spacer = QLabel()
         self.spacer.setFixedWidth(100)
+        self.time_elapsed = QTimer()
         self.time_elapsed_label = QLabel()
         self.time_elapsed_label.setText("Time elapsed [sec]")
         self.time_elapsed_entry = QLabel()
@@ -194,6 +199,14 @@ class GUI(QDialog):
 
         # finally
         self.set_layout()
+
+    def lv_timer_func(self):
+        self.time_elapsed_entry.setText('0')
+        self.time_elapsed.start(1000)
+        self.time_elapsed.timeout.connect(self.update_elapsed_time)
+
+    def lv_timer_stop_func(self):
+        self.time_elapsed.stop()
 
     def closeEvent(self, event):
         if self.camera_controls_group.camera is not None and \
@@ -339,6 +352,9 @@ class GUI(QDialog):
         self.start_button.setEnabled(False)
         self.abort_button.setEnabled(True)
         self.return_button.setEnabled(False)
+        self.time_elapsed_entry.setText('0')
+        self.time_elapsed.start(1000)
+        self.time_elapsed.timeout.connect(self.update_elapsed_time)
         if self.scan_controls_group.delay_time == 0:
             self.start_real()
         elif self.scan_controls_group.delay_time > 0:
@@ -347,6 +363,9 @@ class GUI(QDialog):
             self.gui_timer.singleShot(self.scan_controls_group.delay_time*60000, self.start_real)
         else:
             self.abort()
+
+    def update_elapsed_time(self):
+        self.time_elapsed_entry.setText(str(int(self.time_elapsed_entry.text())+1))
 
     def start_real(self):
         #self.check_data_overwrite()
@@ -456,6 +475,7 @@ class GUI(QDialog):
                 self.motor_control_group.motion_vert.motion_over_signal.connect(self.doscan)
         else: # all scans done, finish the experiment
             # This section runs only if scan was finished normally, not aborted
+            self.time_elapsed.stop()
             self.log.info("***** EXPERIMENT finished without errors ****")
             # End of section
             self.scan_controls_group.setTitle(
@@ -623,6 +643,7 @@ class GUI(QDialog):
     def abort(self):
         self.number_of_scans = 0
         self.gui_timer.stop()
+        self.time_elapsed.stop()
         self.concert_scan.abort_scan()
         self.motor_control_group.stop_motors_func()
         self.motor_control_group.close_shutter_func()
