@@ -149,7 +149,7 @@ class ACQsetup(object):
     """
 
     def __init__(self, camera, ffcsetup, viewer):
-        self.viewer = viewer
+        #self.viewer = viewer
         self.log = None
         self.ffcsetup = ffcsetup
         self.camera = camera
@@ -464,7 +464,7 @@ class ACQsetup(object):
                     yield self.camera.grab()
         except:
             self.log.exception('Error during data acquisition')
-        self.viewer.limits = [-1e-3, 2e-3]
+        #self.viewer.limits = [-1e-3, 2e-3]
         self.ffcsetup.close_shutter()
         self.motor.stop().join()
         self.return_ct_stage_to_start(block=True)

@@ -2,7 +2,7 @@
 # PyQT imports
 from PyQt5.QtWidgets import QGroupBox, QDialog, QApplication, QGridLayout
 from PyQt5.QtWidgets import QLabel, QPushButton, QFileDialog, QHBoxLayout
-# from PyQt5.QtWidgets import QLineEdit, QComboBox, QCheckBox
+from PyQt5.QtWidgets import QLineEdit, QComboBox, QCheckBox
 from PyQt5.QtCore import QTimer, QEventLoop, QFile, QTextStream
 # GUI groups and objects
 from camera_controls import CameraControlsGroup
@@ -162,12 +162,35 @@ class GUI(QDialog):
         self.button_save_params.clicked.connect(self.dump2yaml)
         self.button_load_params.clicked.connect(self.load_from_yaml)
         self.button_log_file.clicked.connect(self.select_log_file_func)
+        self.spacer = QLabel()
+        self.spacer.setFixedWidth(100)
+        self.time_elapsed_label = QLabel()
+        self.time_elapsed_label.setText("Time elapsed [sec]")
+        self.time_elapsed_entry = QLabel()
+        self.viewer_lowlim_label = QLabel()
+        self.viewer_lowlim_label.setText("Viewer low limit")
+        self.viewer_lowlim_entry = QLineEdit()
+        self.viewer_highlim_label = QLabel()
+        self.viewer_highlim_label.setText("Viewer high limit")
+        self.viewer_highlim_entry = QLineEdit()
         button_grp_layout = QHBoxLayout()
+        button_grp_layout.addWidget(self.time_elapsed_label)
+        button_grp_layout.addWidget(self.time_elapsed_entry)
+        button_grp_layout.addWidget(self.spacer)
+        button_grp_layout.addWidget(self.viewer_lowlim_label)
+        button_grp_layout.addWidget(self.viewer_lowlim_entry)
+        button_grp_layout.addWidget(self.viewer_highlim_label)
+        button_grp_layout.addWidget(self.viewer_highlim_entry)
+        button_grp_layout.addWidget(self.spacer)
         button_grp_layout.addWidget(self.button_save_params)
         button_grp_layout.addWidget(self.button_load_params)
         #button_grp_layout.addWidget(self.select_log_file_func)
         self.exp_imp_button_grp.setLayout(button_grp_layout)
         self.exp_imp_button_grp.setEnabled(False)
+        self.viewer_lowlim_entry.editingFinished.connect(
+            self.set_viewer_limits_alt)
+        self.viewer_highlim_entry.editingFinished.connect(
+            self.set_viewer_limits_alt)
 
         # finally
         self.set_layout()
@@ -273,7 +296,8 @@ class GUI(QDialog):
         self.ffc_controls_group.setEnabled(val)
         self.file_writer_group.setEnabled(val)
         self.ring_status_group.setEnabled(val)
-        self.exp_imp_button_grp.setEnabled(val)
+        self.button_load_params.setEnabled(val)
+        self.button_save_params.setEnabled(val)
         self.scan_controls_group.ena_disa_all_entries(val)
         self.reco_settings_group.setEnabled(val)
 
@@ -638,6 +662,28 @@ class GUI(QDialog):
             [self.camera_controls_group.view_low,
              self.camera_controls_group.view_high]
 
+    @property
+    def view_low(self):
+        try:
+            return float(self.viewer_lowlim_entry.text())
+        except:
+            self.viewer_lowlim_entry.setText('0')
+            error_message('Viewer limits must be numbers')
+            return 0
+
+    @property
+    def view_high(self):
+        try:
+            return float(self.viewer_highlim_entry.text())
+        except:
+            self.viewer_highlim_entry.setText('150')
+            error_message('Viewer limits must be numbers')
+            return 150
+
+    def set_viewer_limits_alt(self):
+        self.camera_controls_group.viewer.limits = \
+            [self.view_low, self.view_high]
+
     def autoset_n_buffers(self):
         if self.camera_controls_group.buffered_entry.currentText() == "YES" and \
                 (self.camera_controls_group.trigger_entry.currentText() == 'EXTERNAL' or \
@@ -697,14 +743,6 @@ class GUI(QDialog):
         self.log = self._log.get_module_logger(__name__)
 
         return
-
-    # def change_reco_enabled_flag(self):
-    #     if self.reco_settings_group.isChecked():
-    #         self.reco_enabled = True
-    #         self.log.info("reco_enabled = True")
-    #     else:
-    #         self.reco_enabled = False
-    #         self.log.info("Reco_group unchecked reco_enabled = False")
 
     def auto_set_buffers_ext_edge(self):
         if self.camera_controls_group.trig_mode == "EXTERNAL" and \

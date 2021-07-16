@@ -41,7 +41,7 @@ class CameraControlsGroup(QGroupBox):
         self.timer = QTimer()
         self.camera = None
         self.log = None
-        self.plugin_names = ['pco', 'pcoclhs']
+        #self.plugin_names = ['pco', 'pcoclhs']
         
         # Buttons
         self.live_on_button = QPushButton("LIVE ON")
@@ -957,9 +957,6 @@ class CameraControlsGroup(QGroupBox):
             self.live_on_button.setEnabled(True)
             self.live_off_button.setEnabled(True)
             self.save_one_image_button.setEnabled(True)
-
-    def ena_disa_all(self, val = True):
-        self.trigger_entry.setEnabled(val)
 
 
 class LivePreviewThread(QThread):

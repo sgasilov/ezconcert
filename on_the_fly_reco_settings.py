@@ -166,17 +166,17 @@ class RecoSettingsGroup(QGroupBox):
         self.args.data_splitting_policy = 'many'
         self.args.absorptivity = True
         self.args.fix_nan_and_inf = True
-        # if self.pr_swi:
-        #     self.args.energy = 19
-        #     self.args.pixel_size = 3.5e-6
-        #     self.args.propagation_distance = 0.07, 0.07
-        #     self.args.retrieval_padded_width = 4096
-        #     self.args.retrieval_padded_height = 4096
-        #     self.args.regularization_rate = 2.5
-        #     self.args.projection_margin = 64
-        # if self.ffc_files_swi.isChecked():
-        #     self.args.flat = self.flat
-        #     self.args.dark = self.dark
+        if self.pr_swi:
+            self.args.energy = self.energy
+            self.args.pixel_size = self.pix_size
+            self.args.propagation_distance = self.prop_dist, self.prop_dist
+            self.args.retrieval_padded_width = 4096
+            self.args.retrieval_padded_height = 4096
+            self.args.regularization_rate = self.db_ratio
+            self.args.projection_margin = 64
+        if self.ffc_files_swi.isChecked():
+            self.args.flat = self.flat
+            self.args.dark = self.dark
         # else:
         #     self.args.flat = None
         #     self.args.dark = None
@@ -312,16 +312,4 @@ class RecoSettingsGroup(QGroupBox):
             return None
         return x
 
-    @property
-    def db_ratio(self):
-        try:
-            x = float(self.db_ratio_entry.text())
-        except ValueError:
-            error_message("Delta-beta ratio must be positive number")
-            self.all_params_correct = False
-            return None
-        if x < 0:
-            error_message("Delta-beta ratio must be positive number")
-            self.all_params_correct = False
-            return None
-        return x
+
