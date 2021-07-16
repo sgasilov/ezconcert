@@ -929,6 +929,25 @@ class CameraControlsGroup(QGroupBox):
         except:
             warning_message('Can not get read-out rate')
 
+    @property
+    def view_low(self):
+        try:
+            return float(self.viewer_lowlim_entry.text())
+        except:
+            self.viewer_lowlim_entry.setText('0')
+            error_message('Viewer limits must be numbers')
+            return 0
+
+    @property
+    def view_high(self):
+        try:
+            return float(self.viewer_highlim_entry.text())
+        except:
+            self.viewer_highlim_entry.setText('150')
+            error_message('Viewer limits must be numbers')
+            return 150
+
+
     def extcamera_switched_func(self):
         if self.ttl_scan.isChecked():
             self.live_on_button.setEnabled(False)
@@ -938,6 +957,9 @@ class CameraControlsGroup(QGroupBox):
             self.live_on_button.setEnabled(True)
             self.live_off_button.setEnabled(True)
             self.save_one_image_button.setEnabled(True)
+
+    def ena_disa_all(self, val = True):
+        self.trigger_entry.setEnabled(val)
 
 
 class LivePreviewThread(QThread):

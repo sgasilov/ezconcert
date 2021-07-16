@@ -150,7 +150,7 @@ class GUI(QDialog):
             self.autoset_some_params_for_CTstage_motor)
         self.camera_controls_group.trigger_entry.currentIndexChanged.connect(
             self.enable_TTL_scan_if_Dimax_and_Ext_trig)
-        self.reco_settings_group.toggled.connect(self.change_reco_enabled_flag)
+        #self.reco_settings_group.toggled.connect(self.change_reco_enabled_flag)
 
 
         # SAVE/LOAD params group
@@ -195,7 +195,9 @@ class GUI(QDialog):
             try:
                 open(logfname, 'a').close()
             except:
-                warning_message('Cannot create log file')
+                warning_message('Cannot create log file in the selected directory. \n'
+                            'Check permissions and restart.')
+                self.exit()
             self._log = log
             self._log.log_to_file(logfname, logging.DEBUG)
             self.log = self._log.get_module_logger(__name__)
@@ -273,8 +275,7 @@ class GUI(QDialog):
         self.ring_status_group.setEnabled(val)
         self.exp_imp_button_grp.setEnabled(val)
         self.scan_controls_group.ena_disa_all_entries(val)
-        if self.reco_enabled:
-            self.scan_controls_group.setEnabled(val)
+        self.reco_settings_group.setEnabled(val)
 
     def get_outer_motor_grid(self):
         if self.scan_controls_group.outer_steps > 0:
@@ -520,7 +521,7 @@ class GUI(QDialog):
         self.concert_scan.create_experiment(acquisitions,
                                             self.file_writer_group.ctsetname,
                                             self.file_writer_group.separate_scans)
-        if self.reco_enabled:
+        if self.reco_settings_group.isChecked():
             try:
                 self.reco_settings_group.set_args(
                     self.camera_controls_group.roi_height//2,
@@ -591,7 +592,7 @@ class GUI(QDialog):
         #    self.concert_scan.attach_viewer()
         #else:
         self.concert_scan.attach_viewer()
-        if self.reco_enabled:
+        if self.reco_settings_group.isChecked():
             self.log.info("Attaching online reco add on")
             self.concert_scan.attach_online_reco()
 
@@ -634,8 +635,8 @@ class GUI(QDialog):
 
     def set_viewer_limits(self):
         self.camera_controls_group.viewer.limits = \
-            [float(self.camera_controls_group.viewer_lowlim_entry.text()),
-             float(self.camera_controls_group.viewer_highlim_entry.text())]
+            [self.camera_controls_group.view_low,
+             self.camera_controls_group.view_high]
 
     def autoset_n_buffers(self):
         if self.camera_controls_group.buffered_entry.currentText() == "YES" and \
@@ -697,13 +698,13 @@ class GUI(QDialog):
 
         return
 
-    def change_reco_enabled_flag(self):
-        if self.reco_settings_group.isChecked():
-            self.reco_enabled = True
-            self.log.info("reco_enabled = True")
-        else:
-            self.reco_enabled = False
-            self.log.info("Reco_group unchecked reco_enabled = False")
+    # def change_reco_enabled_flag(self):
+    #     if self.reco_settings_group.isChecked():
+    #         self.reco_enabled = True
+    #         self.log.info("reco_enabled = True")
+    #     else:
+    #         self.reco_enabled = False
+    #         self.log.info("Reco_group unchecked reco_enabled = False")
 
     def auto_set_buffers_ext_edge(self):
         if self.camera_controls_group.trig_mode == "EXTERNAL" and \
@@ -779,7 +780,7 @@ class GUI(QDialog):
     def load_from_yaml(self):
         fname, _ = QFileDialog.getOpenFileName(self, "Select yaml file with BMITgui params",
                                                self.file_writer_group.root_dir,
-                                               "Python Files (*.yaml)")
+                                               "Yaml Files (*.yaml)")
 
         if fname == '':
             warning_message('Select the file')

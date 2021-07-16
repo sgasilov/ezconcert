@@ -31,7 +31,7 @@ class ConcertScanThread(QThread):
         self.camera = camera
         self.ffc_setup = FFCsetup()
         # Collection of acquisitions we create it once
-        self.acq_setup = ACQsetup(self.camera, self.ffc_setup)
+        self.acq_setup = ACQsetup(self.camera, self.ffc_setup, self.viewer)
         self.exp = None  # That is experiment. We create it each time before run is pressed
         # before that all camera, acquisition, and ffc parameters must be set according to the
         # user input and consumers must be attached
@@ -148,7 +148,8 @@ class ACQsetup(object):
     and all parameters which acquisitions require
     """
 
-    def __init__(self, camera, ffcsetup):
+    def __init__(self, camera, ffcsetup, viewer):
+        self.viewer = viewer
         self.log = None
         self.ffcsetup = ffcsetup
         self.camera = camera
@@ -463,6 +464,7 @@ class ACQsetup(object):
                     yield self.camera.grab()
         except:
             self.log.exception('Error during data acquisition')
+        self.viewer.limits = [-1e-3, 2e-3]
         self.ffcsetup.close_shutter()
         self.motor.stop().join()
         self.return_ct_stage_to_start(block=True)
