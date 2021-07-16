@@ -490,8 +490,8 @@ class CameraControlsGroup(QGroupBox):
         #if self.camera_model_label.text() == 'Dummy camera':
         #    return -1
         #try:
-        self.log.info("Stop recording")
         if self.camera.state == 'recording':
+            self.log.info("Stop recording")
             self.camera.stop_recording()
         self.log.info("Set exposure time")
         self.camera.exposure_time = self.exp_time * q.msec
@@ -511,9 +511,9 @@ class CameraControlsGroup(QGroupBox):
         if self.camera.buffered:
             self.log.info("Setting number of buffers")
             self.camera.num_buffers = self.buffnum
-        self.log.info("Set time stamp")
+        self.log.info("Setting time stamp")
         self.set_time_stamp()
-        self.log.info("Set ROI")
+        self.log.info("Setting ROI")
         self.setROI()
         # except:
         #     tmp = "Can not set camera parameters"
@@ -552,6 +552,7 @@ class CameraControlsGroup(QGroupBox):
         self.set_camera_params(buff=False)
         self.camera.start_recording()
         self.live_preview_thread.live_on = True
+        self.live_on = True
         self.lv_duration = time.time()
 
     def live_on_func_ext_trig(self):
@@ -606,6 +607,7 @@ class CameraControlsGroup(QGroupBox):
     def live_off_func(self):
         self.log.info("Live off func called")
         self.live_preview_thread.live_on = False
+        self.live_on = False
         self.lv_stream2disk_on = False
         self.ena_disa_buttons(True)
         try:

@@ -352,6 +352,10 @@ class GUI(QDialog):
         self.start_button.setEnabled(False)
         self.abort_button.setEnabled(True)
         self.return_button.setEnabled(False)
+        self.log.info("** {:}, {:}".format(self.camera_controls_group.live_on,self.camera_controls_group.lv_stream2disk_on ))
+        if self.camera_controls_group.live_on or \
+                self.camera_controls_group.lv_stream2disk_on:
+            self.camera_controls_group.live_off_func()
         self.time_elapsed_entry.setText('0.0')
         self.time_elapsed.start(500)
         self.time_elapsed.timeout.connect(self.update_elapsed_time)
@@ -372,9 +376,6 @@ class GUI(QDialog):
         self.auto_set_buffers_ext_edge()
         if self.check_discrepancy_starting_point():
             return
-        if self.camera_controls_group.live_on or \
-                self.camera_controls_group.lv_stream2disk_on:
-            self.camera_controls_group.live_off_func()
         #if self.scan_controls_group.inner_loop_continuous:
         #    self.validate_velocity()
         self.log.info("***** EXPERIMENT STARTED *****")
