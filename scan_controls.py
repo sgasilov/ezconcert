@@ -34,7 +34,7 @@ class ScanControlsGroup(QGroupBox):
         self.start_label = QLabel()
         self.start_label.setText("START POSITION")
         self.steps_label = QLabel()
-        self.steps_label.setText("NUMBER OF STEPS")
+        self.steps_label.setText("NUMBER OF POINTS")
         self.range_label = QLabel()
         self.range_label.setText("RANGE")
         self.endpoint_label = QLabel()

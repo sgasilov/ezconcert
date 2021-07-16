@@ -487,31 +487,42 @@ class CameraControlsGroup(QGroupBox):
 
     def set_camera_params(self, buff=None):
         self.log.info("Setting camera parameters")
-        if self.camera_model_label.text() == 'Dummy camera':
-            return -1
-        try:
-            if self.camera.state == 'recording':
-                self.camera.stop_recording()
-            self.camera.exposure_time = self.exp_time * q.msec
-            if self.camera_model_label.text() == "PCO Dimax":
-                self.camera.frame_rate = self.fps * q.hertz
-            else:
-                self.camera.sensor_pixelrate = int(self.sensor_pix_rate_entry.currentText())
-            if buff is None:
-                self.camera.buffered = self.buffered
-            else:
-                self.camera.buffered = buff
-            if self.camera.buffered:
-                self.camera.num_buffers = self.buffnum
-            self.set_time_stamp()
-            self.setROI()
-        except:
-            tmp = "Can not set camera parameters"
-            self.log.error(tmp)
-            error_message(tmp)
-            return True
+        #if self.camera_model_label.text() == 'Dummy camera':
+        #    return -1
+        #try:
+        self.log.info("Stop recording")
+        if self.camera.state == 'recording':
+            self.camera.stop_recording()
+        self.log.info("Set exposure time")
+        self.camera.exposure_time = self.exp_time * q.msec
+
+        if self.camera_model_label.text() == "PCO Dimax":
+            self.log.info("Set fps")
+            self.camera.frame_rate = self.fps * q.hertz
         else:
-            return False
+            self.log.info("Set pix rate")
+            self.camera.sensor_pixelrate = int(self.sensor_pix_rate_entry.currentText())
+        if buff is None:
+            self.log.info("Set buffered from gui entry {:}".format(self.buffered))
+            self.camera.buffered = self.buffered
+        else:
+            self.log.info("Set buffered explicitly to {:}".format(buff))
+            self.camera.buffered = buff
+        if self.camera.buffered:
+            self.log.info("Setting number of buffers")
+            self.camera.num_buffers = self.buffnum
+        self.log.info("Set time stamp")
+        self.set_time_stamp()
+        self.log.info("Set ROI")
+        self.setROI()
+        # except:
+        #     tmp = "Can not set camera parameters"
+        #     self.log.error(tmp)
+        #     error_message(tmp)
+        #     return True
+        # else:
+        #     return False
+        return False
 
     def set_time_stamp(self):
         if self.time_stamp.isChecked():

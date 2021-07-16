@@ -201,8 +201,8 @@ class GUI(QDialog):
         self.set_layout()
 
     def lv_timer_func(self):
-        self.time_elapsed_entry.setText('0')
-        self.time_elapsed.start(1000)
+        self.time_elapsed_entry.setText('0.0')
+        self.time_elapsed.start(500)
         self.time_elapsed.timeout.connect(self.update_elapsed_time)
 
     def lv_timer_stop_func(self):
@@ -352,8 +352,8 @@ class GUI(QDialog):
         self.start_button.setEnabled(False)
         self.abort_button.setEnabled(True)
         self.return_button.setEnabled(False)
-        self.time_elapsed_entry.setText('0')
-        self.time_elapsed.start(1000)
+        self.time_elapsed_entry.setText('0.0')
+        self.time_elapsed.start(500)
         self.time_elapsed.timeout.connect(self.update_elapsed_time)
         if self.scan_controls_group.delay_time == 0:
             self.start_real()
@@ -365,7 +365,7 @@ class GUI(QDialog):
             self.abort()
 
     def update_elapsed_time(self):
-        self.time_elapsed_entry.setText(str(int(self.time_elapsed_entry.text())+1))
+        self.time_elapsed_entry.setText(str(float(self.time_elapsed_entry.text())+0.5))
 
     def start_real(self):
         #self.check_data_overwrite()
@@ -682,6 +682,8 @@ class GUI(QDialog):
         self.camera_controls_group.viewer.limits = \
             [self.camera_controls_group.view_low,
              self.camera_controls_group.view_high]
+        self.viewer_lowlim_entry.setText(str(self.camera_controls_group.view_low))
+        self.viewer_highlim_entry.setText(str(self.camera_controls_group.view_high))
 
     @property
     def view_low(self):
@@ -704,6 +706,8 @@ class GUI(QDialog):
     def set_viewer_limits_alt(self):
         self.camera_controls_group.viewer.limits = \
             [self.view_low, self.view_high]
+        self.camera_controls_group.viewer_lowlim_entry.setText(str(self.view_low))
+        self.camera_controls_group.viewer_highlim_entry.setText(str(self.view_high))
 
     def autoset_n_buffers(self):
         if self.camera_controls_group.buffered_entry.currentText() == "YES" and \
@@ -728,6 +732,7 @@ class GUI(QDialog):
             self.scan_controls_group.readout_intheend.setEnabled(True)
         else:
             self.scan_controls_group.readout_intheend.setEnabled(False)
+            self.scan_controls_group.readout_intheend.setChecked(False)
 
 
     def validate_velocity(self):
