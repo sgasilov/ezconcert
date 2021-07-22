@@ -105,7 +105,7 @@ class Login(QDialog):
     def on_login_button_clicked(self):
         #project_valid, username_valid = self.validate_entries()
         if self.project_name != '':
-            prj_dir_name = os.path.join("/beamlinedata/BMIT/projects/prj",
+            prj_dir_name = os.path.join("/beamlinedata/BMIT/projects/prj"+
                                self.project_name, "raw")
             project_valid = self.validate_entries()
             can_write = self.validate_dir(prj_dir_name)

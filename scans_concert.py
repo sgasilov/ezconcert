@@ -180,14 +180,14 @@ class ACQsetup(object):
         self.darks_softr = Acquisition("darks", self.take_darks_softr)
         # softr
         self.tomo_softr = Acquisition("tomo", self.take_tomo_softr)
-        self.radio_timelaps = Acquisition("radio", self.take_softr_timelaps)
+        self.radio_timelaps = Acquisition("radios", self.take_softr_timelaps)
         # auto
         self.tomo_auto_dimax = Acquisition("tomo", self.take_tomo_auto_dimax)
-        #self.tomo_auto = Acquisition("tomo", self.take_tomo_auto)
-        self.tomo_auto = Acquisition("radios", self.take_tomo_auto)
+        self.tomo_auto = Acquisition("tomo", self.take_tomo_auto)
+        #self.tomo_auto = Acquisition("radios", self.take_tomo_auto)
         # external
-        #self.tomo_ext = Acquisition("tomo", self.take_tomo_ext)
-        self.tomo_ext = Acquisition("radios", self.take_tomo_ext)
+        self.tomo_ext = Acquisition("tomo", self.take_tomo_ext)
+        #self.tomo_ext = Acquisition("radios", self.take_tomo_ext)
         self.tomo_ext_dimax = Acquisition("tomo", self.take_tomo_ext_dimax)
         # tests of sync with top-up inj cycles
         self.rec_seq_with_inj_sync = Acquisition("seq", self.test_rec_seq_with_sync)

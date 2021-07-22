@@ -425,7 +425,7 @@ class CameraControlsGroup(QGroupBox):
             self.camera_model_label.setText("PCO 4000")
             self.connect_to_camera_status.setText("CONNECTED to PCO 4000")
             self.trigger_entry.addItems(["SOFTWARE"])
-            self.trigger_entry.setEnabled(False)
+            #self.trigger_entry.setEnabled(False)
             self.viewer_highlim_entry.setText("110")
         if self.camera.sensor_width.magnitude == 2560:
             self.camera_model_label.setText("PCO Edge")
@@ -570,9 +570,11 @@ class CameraControlsGroup(QGroupBox):
     def live_on_stream2disk_prepare(self):
         self.fname, fext = self.QFD.getSaveFileName(
             self, 'Select directory', self.last_dir, "Image Files (*.tif)")
+        self.last_dir = os.path.dirname(self.fname)
         self.lv_dirwalker = DirectoryWalker(root=os.path.dirname(self.fname),
                                             dsetname="frames_{:>02}.tif",
-                                            bytes_per_file=2**37)
+                                            #bytes_per_file=2**37)
+                                            bytes_per_file=0)
         self.lv_acquisitions = [Acquisition("Radios", self.acq_lv_stream2disk)]
         self.lv_experiment = Experiment(
             acquisitions=self.lv_acquisitions,
@@ -581,22 +583,25 @@ class CameraControlsGroup(QGroupBox):
             name_fmt="live_view_seq_{:>03}")
         self.cons_writer = ImageWriter(self.lv_acquisitions, self.lv_dirwalker, async=True)
         self.cons_viewer = Consumer(self.lv_acquisitions, self.viewer)
-        self.log.info("Streaming lv sequence to disk")
-        self.ena_disa_buttons(False)
+        # self.log.info("Streaming lv sequence to disk")
+        # self.ena_disa_buttons(False)
         if self.camera.state == "recording":
             self.camera.stop_recording()
         # if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
         #     self.camera.trigger_source = self.camera.trigger_sources.AUTO
         if self.trig_mode == "EXTERNAL":
+            self.log.info("Preparing to stream to disk with external trigger")
             self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
         elif self.trig_mode == "AUTO":
             self.camera.trigger_source = self.camera.trigger_sources.AUTO
+            self.log.info("Preparing to stream to disk with auto trigger")
         else:
             error_message("Select AUTO or EXTERNAL trigger in order to stream to disk")
             self.camera.trigger_source = self.camera.trigger_sources.AUTO
         self.set_camera_params(buff=False)
 
     def acq_lv_stream2disk(self):
+        self.log.info("Inside the acquisition which streams to disk")
         try:
             self.camera.start_recording()
             while self.lv_stream2disk_on:
@@ -608,14 +613,29 @@ class CameraControlsGroup(QGroupBox):
         if self.fname == None:
             error_message("Select the filename first")
             return
+        self.ena_disa_buttons(False)
         self.lv_stream2disk_on = True
+        self.log.info("Start recording and stream to disk")
         self.lv_experiment.run()
+
+    def stop_and_delete_concert_exp_objects(self):
+        try:
+            self.lv_experiment.abort()
+            self.lv_experiment = None
+            self.lv_writer = None
+            self.lv_dirwalker = None
+            self.fname = None
+            self.log.debug("Aborted and deleted concert experiment")
+        except:
+            self.log.debug("Cannot abort and delete concert experiment")
 
     def live_off_func(self):
         self.log.info("Live off func called")
         self.live_preview_thread.live_on = False
         self.live_on = False
-        self.lv_stream2disk_on = False
+        if self.lv_stream2disk_on:
+            self.lv_stream2disk_on = False
+            self.stop_and_delete_concert_exp_objects()
         self.ena_disa_buttons(True)
         try:
             self.camera.stop_recording()
@@ -725,6 +745,7 @@ class CameraControlsGroup(QGroupBox):
             self.delay_entry.setEnabled(True)
 
     def ena_disa_buttons(self, val):
+        self.save_one_image_button.setEnabled(val)
         self.live_on_button_stream2disk.setEnabled(val)
         self.live_on_stream_select_file_button.setEnabled(val)
         self.live_on_button.setEnabled(val)
