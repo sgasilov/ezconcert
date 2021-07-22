@@ -356,7 +356,7 @@ class MotorsControlsGroup(QGroupBox):
             self.move_CT_jog_plus.setEnabled(True)
             self.move_CT_jog_minus.setEnabled(True)
             self.stop_CT_button.setEnabled(True)
-            self.CT_motor.base_vel = 5.0 * q.deg / q.sec
+            self.CT_motor.base_vel = 10.0 * q.deg / q.sec
             self.CT_mot_monitor = EpicsMonitorFloat(self.CT_motor.RBV)
             self.CT_mot_monitor.i0_state_changed_signal.connect(
                 self.CT_mot_value.setText

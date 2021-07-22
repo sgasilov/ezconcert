@@ -99,24 +99,21 @@ class Login(QDialog):
         #return project_valid, username_valid
         return project_valid
 
-    def validate_dir(self):
-        return os.access(self.expdir_entry.text(), os.W_OK)
+    def validate_dir(self, pdr):
+        return os.access(pdr, os.W_OK)
 
     def on_login_button_clicked(self):
         #project_valid, username_valid = self.validate_entries()
-        tmp = "/mnt/BMIT_data/BMIT-USERS-DATA/"
         if self.project_name != '':
+            prj_dir_name = os.path.join("/beamlinedata/BMIT/projects/prj",
+                               self.project_name, "raw")
             project_valid = self.validate_entries()
-            if project_valid:
+            can_write = self.validate_dir(prj_dir_name)
+            if project_valid and can_write:
                 self.login_parameters_dict.update({'bl': self.bl_name})
                 self.login_parameters_dict.update({'project': self.project_name})
-                tmp = os.path.join(tmp, self.project_name)
                 # add fileExistsError exception later in Py3
-                try:
-                    os.makedirs(tmp)#, exist_ok=True)
-                except:
-                    pass
-                self.login_parameters_dict.update({'expdir': tmp})
+                self.login_parameters_dict.update({'expdir': prj_dir_name})
                 self.accept()
             #elif not username_valid:
             #    error_message("Username should be alpha-numeric ")
@@ -125,8 +122,10 @@ class Login(QDialog):
                               "where CC is cycle number, "
                               "T is one-letter type, "
                               "and NNNNN is project number")
+            elif not can_write:
+                error_message("Cannot write in the project directory")
         elif self.expdir_name != '':
-            if self.validate_dir:
+            if self.validate_dir(self.expdir_entry.text()):
                 self.login_parameters_dict.update({'expdir': self.expdir_name})
                 self.accept()
             else:

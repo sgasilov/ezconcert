@@ -581,15 +581,22 @@ class CameraControlsGroup(QGroupBox):
             name_fmt="live_view_seq_{:>03}")
         self.cons_writer = ImageWriter(self.lv_acquisitions, self.lv_dirwalker, async=True)
         self.cons_viewer = Consumer(self.lv_acquisitions, self.viewer)
-
-    def acq_lv_stream2disk(self):
         self.log.info("Streaming lv sequence to disk")
         self.ena_disa_buttons(False)
         if self.camera.state == "recording":
             self.camera.stop_recording()
-        if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
+        # if self.camera.trigger_source != self.camera.trigger_sources.AUTO:
+        #     self.camera.trigger_source = self.camera.trigger_sources.AUTO
+        if self.trig_mode == "EXTERNAL":
+            self.camera.trigger_source = self.camera.trigger_sources.EXTERNAL
+        elif self.trig_mode == "AUTO":
+            self.camera.trigger_source = self.camera.trigger_sources.AUTO
+        else:
+            error_message("Select AUTO or EXTERNAL trigger in order to stream to disk")
             self.camera.trigger_source = self.camera.trigger_sources.AUTO
         self.set_camera_params(buff=False)
+
+    def acq_lv_stream2disk(self):
         try:
             self.camera.start_recording()
             while self.lv_stream2disk_on:

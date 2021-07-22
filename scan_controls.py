@@ -37,6 +37,8 @@ class ScanControlsGroup(QGroupBox):
         self.steps_label.setText("NUMBER OF POINTS")
         self.range_label = QLabel()
         self.range_label.setText("RANGE")
+        self.step_size_label = QLabel()
+        self.step_size_label.setText("OR STEP SIZE")
         self.endpoint_label = QLabel()
         self.endpoint_label.setText("ENDPOINT")
         self.flats1_label = QLabel()
@@ -53,6 +55,7 @@ class ScanControlsGroup(QGroupBox):
         self.outer_loop_start_entry = QLineEdit()
         self.outer_loop_steps_entry = QLineEdit()
         self.outer_loop_range_entry = QLineEdit()
+        self.outer_loop_step_size_entry = QLineEdit()
         self.outer_loop_endpoint = QCheckBox("Include")
         self.outer_loop_endpoint.setChecked(True)
         self.outer_loop_flats_1 = QCheckBox("After")
@@ -72,6 +75,8 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_steps_entry.setText("1000")
         self.inner_loop_range_entry = QLineEdit()
         self.inner_loop_range_entry.setText("180")
+        self.inner_loop_step_size_entry = QLineEdit()
+        self.inner_loop_step_size_entry.setText("0.18")
         self.inner_loop_endpoint = QCheckBox("Include")
         self.inner_loop_flats_1 = QCheckBox("After")
         self.inner_loop_continuous = QCheckBox("On-the-fly")
@@ -95,7 +100,14 @@ class ScanControlsGroup(QGroupBox):
         #signals
         self.outer_loop_flats_0.stateChanged.connect(self.constrain_flats_before)
         self.outer_loop_flats_1.stateChanged.connect(self.constrain_flats_after)
+        self.inner_loop_step_size_entry.editingFinished.connect(self.get_inner_range)
+        self.inner_loop_range_entry.editingFinished.connect(self.get_inner_step_size)
+        self.outer_loop_range_entry.editingFinished.connect(self.get_outer_step_size)
+        self.outer_loop_step_size_entry.editingFinished.connect(self.get_outer_range)
         self.set_layout()
+
+        #check input
+        self.input_correct = True
 
     def set_layout(self):
         layout = QGridLayout()
@@ -105,7 +117,7 @@ class ScanControlsGroup(QGroupBox):
         layout.addWidget(self.return_button, 0, 4, 1, 2)
         layout.addWidget(self.delay_start_label, 0, 6)
         layout.addWidget(self.delay_start_entry, 0, 7)
-        layout.addWidget(self.readout_intheend, 0, 8)
+        layout.addWidget(self.readout_intheend, 0, 9)
 
         # Top labels
         layout.addWidget(self.motor_label, 1, 1)
@@ -113,9 +125,10 @@ class ScanControlsGroup(QGroupBox):
         layout.addWidget(self.start_label, 1, 3)
         layout.addWidget(self.steps_label, 1, 4)
         layout.addWidget(self.range_label, 1, 5)
-        layout.addWidget(self.endpoint_label, 1, 6)
-        layout.addWidget(self.flats1_label, 1, 7)
-        layout.addWidget(self.continuous_label, 1, 8)
+        layout.addWidget(self.step_size_label, 1, 6)
+        layout.addWidget(self.endpoint_label, 1, 7)
+        layout.addWidget(self.flats1_label, 1, 8)
+        layout.addWidget(self.continuous_label, 1, 9)
 
         # Outer loop
         layout.addWidget(self.outer_loop_label, 2, 0)
@@ -124,9 +137,10 @@ class ScanControlsGroup(QGroupBox):
         layout.addWidget(self.outer_loop_start_entry, 2, 3)
         layout.addWidget(self.outer_loop_steps_entry, 2, 4)
         layout.addWidget(self.outer_loop_range_entry, 2, 5)
-        layout.addWidget(self.outer_loop_endpoint, 2, 6)
-        layout.addWidget(self.outer_loop_flats_1, 2, 7)
-        layout.addWidget(self.outer_loop_continuous, 2, 8)
+        layout.addWidget(self.outer_loop_step_size_entry, 2, 6)
+        layout.addWidget(self.outer_loop_endpoint, 2, 7)
+        layout.addWidget(self.outer_loop_flats_1, 2, 8)
+        layout.addWidget(self.outer_loop_continuous, 2, 9)
         # layout.addWidget(self.ttl_scan, 2, 8)
 
         # Inner loop
@@ -136,9 +150,10 @@ class ScanControlsGroup(QGroupBox):
         layout.addWidget(self.inner_loop_start_entry, 3, 3)
         layout.addWidget(self.inner_loop_steps_entry, 3, 4)
         layout.addWidget(self.inner_loop_range_entry, 3, 5)
-        layout.addWidget(self.inner_loop_endpoint, 3, 6)
-        layout.addWidget(self.inner_loop_flats_1, 3, 7)
-        layout.addWidget(self.inner_loop_continuous, 3, 8)
+        layout.addWidget(self.inner_loop_step_size_entry, 3, 6)
+        layout.addWidget(self.inner_loop_endpoint, 3, 7)
+        layout.addWidget(self.inner_loop_flats_1, 3, 8)
+        layout.addWidget(self.inner_loop_continuous, 3, 9)
 
         for column in range(8):
             layout.setColumnStretch(column, 1)
@@ -165,9 +180,11 @@ class ScanControlsGroup(QGroupBox):
             x = int(self.delay_start_entry.text())
         except ValueError:
             error_message("Delay start time must be non-negative integer number")
+            self.input_correct = False
             return -1
         if x < 0:
             error_message("Delay start time must be non-negative integer number.")
+            self.input_correct = False
             return -1
         return x
 
@@ -199,6 +216,36 @@ class ScanControlsGroup(QGroupBox):
             return float(self.inner_loop_range_entry.text())
         except ValueError:
             return None
+
+    def get_inner_range(self):
+        x = self.inner_step_size
+        try:
+            self.inner_loop_range_entry.setText(str(x*(self.inner_steps-1)))
+        except:
+            pass
+
+    @property
+    def inner_step_size(self):
+        try:
+            x = float(self.inner_step_size.text())
+        except ValueError:
+            error_message("Step size must be a number")
+            self.input_correct = False
+        return x
+
+    def get_inner_step_size(self):
+        if self.inner_endpoint:
+            try:
+                self.inner_loop_step_size_entry.setText(
+                    str(self.inner_range/(self.inner_steps-1)))
+            except:
+                pass
+        else:
+            try:
+                self.inner_loop_step_size_entry.setText(
+                    str(self.inner_range/self.inner_steps))
+            except:
+                pass
 
     @property
     def inner_endpoint(self):
@@ -245,6 +292,36 @@ class ScanControlsGroup(QGroupBox):
         except ValueError:
             error_message("Range must be floating point number")
             return None
+
+    def get_outer_range(self):
+        x = self.outer_step_size
+        try:
+            self.outer_loop_range_entry.setText(str(x*(self.outer_steps-1)))
+        except:
+            pass
+
+    @property
+    def outer_step_size(self):
+        try:
+            x = float(self.outer_step_size.text())
+        except ValueError:
+            error_message("Step size must be a number")
+            self.input_correct = False
+        return x
+
+    def get_outer_step_size(self):
+        if self.outer_endpoint:
+            try:
+                self.outer_loop_step_size_entry.setText(
+                    str(self.outer_range/(self.outer_steps-1)))
+            except:
+                pass
+        else:
+            try:
+                self.outer_loop_step_size_entry.setText(
+                    str(self.outer_range/self.outer_steps))
+            except:
+                pass
 
     @property
     def outer_endpoint(self):
