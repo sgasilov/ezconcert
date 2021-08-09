@@ -564,10 +564,8 @@ class MotorsControlsGroup(QGroupBox):
                 self.CT_motor.stop().join()
         if self.motion_vert is not None:
             self.motion_vert.abort()
-            self.motion_CT.stop()
         if self.motion_hor is not None:
             self.motion_hor.abort()
-            self.motion_CT.stop()
         # concert devices
         device_abort(m for m in self.motors if m is not None)
 
