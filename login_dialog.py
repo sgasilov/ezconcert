@@ -1,6 +1,6 @@
 import re
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QMetaObject
 from PyQt5.QtWidgets import QDialog, QLineEdit, QPushButton, QLabel, QGridLayout, \
     QFileDialog, QComboBox
 from message_dialog import error_message
@@ -59,6 +59,8 @@ class Login(QDialog):
         layout.setSpacing(15)
         layout.setContentsMargins(25, 25, 25, 25)
         self.setLayout(layout)
+        QMetaObject.invokeMethod(self.login_button,
+                                 "setFocus", Qt.QueuedConnection)
 
     def select_expdir_func(self):
         options = QFileDialog.Options()

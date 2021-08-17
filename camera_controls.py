@@ -63,7 +63,6 @@ class CameraControlsGroup(QGroupBox):
         self.lv_stream2disk_on = False
         self.cons_viewer = None
         self.cons_writer = None
-        self.fname = None
 
         self.live_off_button = QPushButton("LIVE OFF")
         self.live_off_button.setEnabled(False)
@@ -90,6 +89,8 @@ class CameraControlsGroup(QGroupBox):
         self.QFD = QFileDialog()
         self.nim = 0
         self.last_dir = "/data/image-"
+        self.fname = None
+        self.stream_dir = None
 
         # Connect to camera
         self.connect_to_camera_button = QPushButton("Connect to camera")
@@ -250,19 +251,6 @@ class CameraControlsGroup(QGroupBox):
         self.set_layout()
 
 
-    def constrain_buf_by_trig(self):
-        if self.trigger_entry.currentText() == 'AUTO':
-            tmp = self.buffered_entry.findText("NO")
-            self.buffered_entry.setCurrentIndex(tmp)
-        if self.trigger_entry.currentText() == 'SOFTWARE':
-            tmp = self.buffered_entry.findText("NO")
-            self.buffered_entry.setCurrentIndex(tmp)
-            self.buffered_entry.setEnabled(False)
-        if self.trigger_entry.currentText() == 'EXTERNAL':
-            tmp = self.buffered_entry.findText("YES")
-            self.buffered_entry.setCurrentIndex(tmp)
-            self.buffered_entry.setEnabled(False)
-
     def set_layout(self):
         layout = QGridLayout()
         # Buttons on top
@@ -407,6 +395,11 @@ class CameraControlsGroup(QGroupBox):
         self.ttl_scan.setEnabled(False)
         # identify model
         # Dimax must use internal buffer, 4000 only soft trigger
+        # Neither Dimax nor 4000 can use libuca buffer (no sense in that)
+        tmp = self.buffered_entry.findText("NO")
+        self.buffered_entry.setCurrentIndex(tmp)
+        self.buffered_entry.setEnabled(False)
+        self.n_buffers_entry.setEnabled(False)
         if self.camera.sensor_width.magnitude == 2000:
             self.camera_model_label.setText("PCO Dimax")
             self.connect_to_camera_status.setText("CONNECTED to PCO Dimax")
@@ -415,21 +408,19 @@ class CameraControlsGroup(QGroupBox):
             ####################################
             self.camera.storage_mode = self.camera.uca.enum_values.storage_mode.RECORDER
             self.camera.record_mode = self.camera.uca.enum_values.record_mode.RING_BUFFER
-            ####
-            tmp = self.buffered_entry.findText("NO")
-            self.buffered_entry.setCurrentIndex(tmp)
-            self.buffered_entry.setEnabled(False)
-            self.n_buffers_entry.setEnabled(False)
             self.viewer_highlim_entry.setText("40")
         if self.camera.sensor_width.magnitude == 4008:
             self.camera_model_label.setText("PCO 4000")
             self.connect_to_camera_status.setText("CONNECTED to PCO 4000")
-            self.trigger_entry.addItems(["SOFTWARE"])
-            #self.trigger_entry.setEnabled(False)
+            tmp = self.trigger_entry.findText("SOFTWARE")
+            self.trigger_entry.setCurrentIndex(tmp)
+            self.trigger_entry.setEnabled(False)
             self.viewer_highlim_entry.setText("110")
         if self.camera.sensor_width.magnitude == 2560:
             self.camera_model_label.setText("PCO Edge")
             self.connect_to_camera_status.setText("CONNECTED to PCO Edge")
+            # Streaming camera normally uses buffer in PC RAM
+            self.buffered_entry.setEnabled(True)
             self.n_buffers_entry.setEnabled(True)
             self.live_on_button_stream2disk.setEnabled(True)
             self.live_on_stream_select_file_button.setEnabled(True)
@@ -458,8 +449,6 @@ class CameraControlsGroup(QGroupBox):
             [str(i) for i in self.camera.sensor_pixelrates])
         tmp = self.sensor_pix_rate_entry.findText(str(self.camera.sensor_pixelrate))
         self.sensor_pix_rate_entry.setCurrentIndex(tmp)
-        #sensor_vertical_binning
-        # sensor_horizontal_vertical_binning
         self.live_preview_thread.camera = self.camera
         self.readout_thread.camera = self.camera
         self.camera_connected_signal.emit(self.camera)
@@ -467,7 +456,7 @@ class CameraControlsGroup(QGroupBox):
         self.live_off_button.setEnabled(True)
         self.save_one_image_button.setEnabled(True)
         #had to add this in order to avoid that signals
-        #coming to early can break the matplotlib window
+        #coming to early can crash the matplotlib window
         self.live_on_func()
         sleep(1)
         self.live_off_func()
@@ -487,41 +476,34 @@ class CameraControlsGroup(QGroupBox):
 
     def set_camera_params(self, buff=None):
         self.log.info("Setting camera parameters")
-        #if self.camera_model_label.text() == 'Dummy camera':
-        #    return -1
+        if self.camera_model_label.text() == 'Dummy camera':
+            return
         #try:
         if self.camera.state == 'recording':
-            self.log.info("Stop recording")
+            #self.log.info("Stop recording")
             self.camera.stop_recording()
-        self.log.info("Set exposure time")
+        #self.log.info("Set exposure time")
         self.camera.exposure_time = self.exp_time * q.msec
-
         if self.camera_model_label.text() == "PCO Dimax":
-            self.log.info("Set fps")
+            #self.log.info("Set fps")
             self.camera.frame_rate = self.fps * q.hertz
         else:
-            self.log.info("Set pix rate")
+            #self.log.info("Set pix rate")
             self.camera.sensor_pixelrate = int(self.sensor_pix_rate_entry.currentText())
         if buff is None:
-            self.log.info("Set buffered from gui entry {:}".format(self.buffered))
+            #self.log.info("Set buffered from gui entry {:}".format(self.buffered))
             self.camera.buffered = self.buffered
         else:
-            self.log.info("Set buffered explicitly to {:}".format(buff))
+            #self.log.info("Set buffered explicitly to {:}".format(buff))
             self.camera.buffered = buff
         if self.camera.buffered:
-            self.log.info("Setting number of buffers")
+            #self.log.info("Setting number of buffers")
             self.camera.num_buffers = self.buffnum
-        self.log.info("Setting time stamp")
+        #self.log.info("Setting time stamp")
         self.set_time_stamp()
-        self.log.info("Setting ROI")
+        #self.log.info("Setting ROI")
         self.setROI()
-        # except:
-        #     tmp = "Can not set camera parameters"
-        #     self.log.error(tmp)
-        #     error_message(tmp)
-        #     return True
-        # else:
-        #     return False
+        self.log.info("Camera params set without errors")
         return False
 
     def set_time_stamp(self):
@@ -568,13 +550,12 @@ class CameraControlsGroup(QGroupBox):
         self.lv_duration = time.time()
 
     def live_on_stream2disk_prepare(self):
-        self.fname, fext = self.QFD.getSaveFileName(
-            self, 'Select directory', self.last_dir, "Image Files (*.tif)")
-        self.last_dir = os.path.dirname(self.fname)
-        self.lv_dirwalker = DirectoryWalker(root=os.path.dirname(self.fname),
+        self.stream_dir = self.QFD.getExistingDirectory(
+            self, 'Select directory', self.last_dir)
+        self.lv_dirwalker = DirectoryWalker(root=os.path.dirname(self.stream_dir),
                                             dsetname="frames_{:>02}.tif",
-                                            #bytes_per_file=2**37)
-                                            bytes_per_file=0)
+                                            bytes_per_file=2**37)
+                                            #bytes_per_file=0)
         self.lv_acquisitions = [Acquisition("Radios", self.acq_lv_stream2disk)]
         self.lv_experiment = Experiment(
             acquisitions=self.lv_acquisitions,
@@ -610,7 +591,7 @@ class CameraControlsGroup(QGroupBox):
             self.log.error(exp)
 
     def live_on_func_stream2disk(self):
-        if self.fname == None:
+        if self.stream_dir == None:
             error_message("Select the filename first")
             return
         self.ena_disa_buttons(False)
@@ -624,7 +605,7 @@ class CameraControlsGroup(QGroupBox):
             self.lv_experiment = None
             self.lv_writer = None
             self.lv_dirwalker = None
-            self.fname = None
+            self.stream_dir == None
             self.log.debug("Aborted and deleted concert experiment")
         except:
             self.log.debug("Cannot abort and delete concert experiment")
@@ -684,13 +665,16 @@ class CameraControlsGroup(QGroupBox):
 
     def save_one_image(self):
         self.save_one_image_button.setEnabled(False)
+        #fname = self.last_dir+"image-{:>04}.tif".format(self.nim)
+        fname = os.path.join(self.last_dir, "image-{:>04}.tif".format(self.nim))
         f, fext = self.QFD.getSaveFileName(
-            self, 'Save image', self.last_dir, "Image Files (*.tif)")
-        if f == self.last_dir:
-            fname = os.path.join(f, "image-{:>04}.tif".format(self.nim))
-            self.nim += 1
-        else:
-            fname = f + '.tif'
+            self, 'Save image', fname, "Image Files (*.tif)")
+        if f != fname:
+            if f[-4:] != '.tif':
+                fname = f + '.tif'
+            else:
+                fname = f
+        self.nim += 1
         self.last_dir = os.path.dirname(fname)
         tmp = False
         if self.live_preview_thread.live_on == True:
@@ -752,6 +736,24 @@ class CameraControlsGroup(QGroupBox):
         if self.camera_model_label.text() == 'PCO Dimax':
             self.save_lv_sequence_button.setEnabled(val)
         self.live_off_button.setEnabled(not val)
+        self.ena_disa_properties(val)
+
+    def ena_disa_properties(self, val):
+        self.exposure_entry.setEnabled(val)
+        self.fps_entry.setEnabled(val)
+        self.delay_entry.setEnabled(val)
+        self.roi_x0_entry.setEnabled(val)
+        self.roi_y0_entry.setEnabled(val)
+        self.roi_height_entry.setEnabled(val)
+        self.roi_width_entry.setEnabled(val)
+        if self.camera_model_label.text() == 'PCO Edge' or \
+                self.camera_model_label.text() == 'Dummy camera':
+            self.buffered_entry.setEnabled(val)
+            self.n_buffers_entry.setEnabled(val)
+        if self.camera_model_label.text() != "PCO 4000":
+            self.trigger_entry.setEnabled(val)
+        self.sensor_hor_bin_entry.setEnabled(val)
+        self.time_stamp.setEnabled(val)
 
     # getters/setters
     @property
@@ -828,12 +830,6 @@ class CameraControlsGroup(QGroupBox):
                     int(x) < int(1000.0 / (self.exp_time + self.dead_time)):
                 warning_message("{:}".format("Dimax FPS must be greater than frequency of external triggers"))
                 x = int(1000.0 / self.exp_time)
-        # if self.camera_model_label.text() == 'PCO Edge' and (x > 100):
-        #     error_message("{:}".format("PCO Edge max FPS is 100"))
-        #     self.all_cam_params_correct = False
-        # if int(x) < int(1000.0 / (self.exp_time + self.dead_time)): #because of round of errors
-        #     #warning_message("FPS [Hz] cannot exceed 1/exp.time[s]; setting fps=1/exp.time")
-        #     self.relate_fps_to_exptime()
         elif self.trig_mode == "EXTERNAL":
             x = self.relate_fps_to_exptime()
         self.fps_entry.setText("{:.02f}".format(x))
@@ -1042,22 +1038,14 @@ class ReadoutThread(QThread):
     def run(self):
         while self.thread_running:
             if self.readout_on:
-                # f, fext = self.qfd.getSaveFileName(
-                #     None, 'Select dir and enter prefix', self.last_dir, "Image Files (*.tif)")
-                # if f == self.last_dir:
-                #     f += "/im-seq-00"
-                # self.last_dir = os.path.dirname(f)
                 self.frames_grabbed_so_far = 0
                 tmp = time.time()
                 self.abort_transfer = False
-
                 self.camera.uca.start_readout()
                 wrtr = TiffWriter(self.filename, bytes_per_file=2 ** 37)
                 while not self.abort_transfer:
                     try:
                         wrtr.write(self.camera.grab())
-                        # fname = f + "{:>04d}".format(self.frames_grabbed_so_far)+'.tif'
-                        # write_tiff(fname, self.camera.grab())
                         self.frames_grabbed_so_far += 1
                     except CameraError:
                         # No more frames
@@ -1067,33 +1055,7 @@ class ReadoutThread(QThread):
                 self.readout_over_signal.emit(True)
                 info_message("Saved {0} images in {1} sec".
                              format(self.frames_grabbed_so_far, int(time.time() - tmp)))
-                # Must be signals
-                # self.save_lv_sequence_button.setEnabled(False)
-                # self.abort_transfer_button.setEnabled(False)
-                # self.viewer.show(self.camera.grab())
                 self.readout_on = False
                 time.sleep(0.05)
             else:
                 time.sleep(1)
-
-    # def run(self):
-    #     self.main_loop()
-    #
-    # def main_loop(self):
-    #     if not self.thread_running:
-    #         return
-    #     if self.live_on:
-    #         self.viewer.show(self.camera.grab())
-    #         self.timer.singleShot(50, self.main_loop) #timer =QTimer.init()
-    #     else:
-    #         self.timer.singleShot(1000, self.main_loop)
-
-# class CameraMonitor(QObject):
-#     camera_connected_signal = pyqtSignal(object)
-#
-#     def __init__(self):
-#         super(CameraMonitor, self).__init__()
-#         self.camera = PV(I0_PV, callback=self.on_camera_state_changed)
-#
-#     def on_camera_state_changed(self, camera, **kwargs ):
-#         self.camera_connected_signal.emit(camera)

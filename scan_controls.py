@@ -238,7 +238,9 @@ class ScanControlsGroup(QGroupBox):
         except ValueError:
             error_message("Step size must be a number")
             self.input_correct = False
-        return x
+            return 0
+        else:
+            return x
 
     def get_inner_step_size(self):
         if self.inner_endpoint:
@@ -317,7 +319,9 @@ class ScanControlsGroup(QGroupBox):
         except ValueError:
             error_message("Step size must be a number")
             self.input_correct = False
-        return x
+            return 0
+        else:
+            return x
 
     def get_outer_step_size(self):
         if self.outer_endpoint:

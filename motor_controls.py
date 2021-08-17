@@ -428,9 +428,11 @@ class MotorsControlsGroup(QGroupBox):
         if self.CT_motor is None:
             return
         else:
+            self.CT_ena_disa_buttons(False)
             # self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
             self.CT_motor.stepvelocity = self.CT_motor.base_vel
             self.motion_CT = MotionThread(self.CT_motor, self.CT_mot_pos_move.value())
+            self.motion_CT.motion_over_signal.connect(self.CT_motion_over)
             self.motion_CT.start()
 
     def CT_rel_plus_func(self):
@@ -438,11 +440,13 @@ class MotorsControlsGroup(QGroupBox):
         if self.CT_motor is None:
             return
         else:
+            self.CT_ena_disa_buttons(False)
             # self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
             self.CT_motor.stepvelocity = self.CT_motor.base_vel
             self.motion_CT = MotionThread(
                 self.CT_motor, self.CT_mot_pos_move.value(), self.CT_mot_rel_move.value(), 1
             )
+            self.motion_CT.motion_over_signal.connect(self.CT_motion_over)
             self.motion_CT.start()
 
     def CT_rel_minus_func(self):
@@ -450,18 +454,31 @@ class MotorsControlsGroup(QGroupBox):
         if self.CT_motor is None:
             return
         else:
+            self.CT_ena_disa_buttons(False)
             # self.CT_motor.stepvelocity = 5.0 * q.deg/q.sec
             self.CT_motor.stepvelocity = self.CT_motor.base_vel
             self.motion_CT = MotionThread(
                 self.CT_motor, self.CT_mot_pos_move.value(), self.CT_mot_rel_move.value(), -1
             )
+            self.motion_CT.motion_over_signal.connect(self.CT_motion_over)
             self.motion_CT.start()
+
+    def CT_ena_disa_buttons(self, val):
+        self.move_CT_mot_button.setEnabled(val)
+        self.move_CT_rel_plus.setEnabled(val)
+        self.move_CT_rel_minus.setEnabled(val)
+        self.move_CT_jog_plus.setEnabled(val)
+        self.move_CT_jog_minus.setEnabled(val)
+
+    def CT_motion_over(self):
+        self.CT_ena_disa_buttons(True)
 
     def CT_jog_plus_func(self):
         """Start CT stage motion in the plus direction."""
         if self.CT_motor is None:
             return
         else:
+            self.CT_ena_disa_buttons(False)
             self.CT_motor.velocity = self.CT_motor.base_vel
 
     def CT_jog_minus_func(self):
@@ -469,6 +486,7 @@ class MotorsControlsGroup(QGroupBox):
         if self.CT_motor is None:
             return
         else:
+            self.CT_ena_disa_buttons(False)
             self.CT_motor.velocity = self.CT_motor.base_vel * -1.0
 
     def CT_reset_func(self):
@@ -503,17 +521,24 @@ class MotorsControlsGroup(QGroupBox):
         if self.hor_motor is None:
             return
         else:
+            self.hor_ena_disa_buttons(False)
             self.motion_hor = MotionThread(self.hor_motor, self.hor_mot_pos_move.value())
+            self.motion_hor.motion_over_signal.connect(self.hor_motion_over)
             self.motion_hor.start()
+
+    def hor_motion_over(self):
+        self.hor_ena_disa_buttons(True)
 
     def hor_rel_plus_func(self):
         """Move the horizontal motor a relative amount in positive direction."""
         if self.hor_motor is None:
             return
         else:
+            self.hor_ena_disa_buttons(False)
             self.motion_hor = MotionThread(
                 self.hor_motor, self.hor_mot_pos_move.value(), self.hor_mot_rel_move.value(), 1
             )
+            self.motion_hor.motion_over_signal.connect(self.hor_motion_over)
             self.motion_hor.start()
 
     def hor_rel_minus_func(self):
@@ -521,27 +546,40 @@ class MotorsControlsGroup(QGroupBox):
         if self.hor_motor is None:
             return
         else:
+            self.hor_ena_disa_buttons(False)
             self.motion_hor = MotionThread(
                 self.hor_motor, self.hor_mot_pos_move.value(), self.hor_mot_rel_move.value(), -1
             )
+            self.motion_hor.motion_over_signal.connect(self.hor_motion_over)
             self.motion_hor.start()
+
+    def hor_ena_disa_buttons(self, val):
+        self.move_hor_mot_button.setEnabled(val)
+        self.move_hor_rel_plus.setEnabled(val)
+        self.move_hor_rel_minus.setEnabled(val)
+
 
     def vert_move_func(self):
         """Move the vertical motor to a selected position."""
         if self.vert_motor is None:
             return
         else:
+            self.vert_ena_disa_buttons(False)
             self.motion_vert = MotionThread(self.vert_motor, self.vert_mot_pos_move.value())
+            self.motion_vert.motion_over_signal.connect(self.vert_motion_over)
             self.motion_vert.start()
+
 
     def vert_rel_plus_func(self):
         """Move the vertical motor a relative amount in positive direction."""
         if self.vert_motor is None:
             return
         else:
+            self.vert_ena_disa_buttons(False)
             self.motion_vert = MotionThread(
                 self.vert_motor, self.vert_mot_pos_move.value(), self.vert_mot_rel_move.value(), 1
             )
+            self.motion_vert.motion_over_signal.connect(self.vert_motion_over)
             self.motion_vert.start()
 
     def vert_rel_minus_func(self):
@@ -549,10 +587,20 @@ class MotorsControlsGroup(QGroupBox):
         if self.vert_motor is None:
             return
         else:
+            self.vert_ena_disa_buttons(False)
             self.motion_vert = MotionThread(
                 self.vert_motor, self.vert_mot_pos_move.value(), self.vert_mot_rel_move.value(), -1
             )
+            self.motion_vert.motion_over_signal.connect(self.vert_motion_over)
             self.motion_vert.start()
+
+    def vert_ena_disa_buttons(self, val):
+        self.move_vert_mot_button.setEnabled(val)
+        self.move_vert_rel_plus.setEnabled(val)
+        self.move_vert_rel_minus.setEnabled(val)
+
+    def vert_motion_over(self):
+        self.vert_ena_disa_buttons(True)
 
     def stop_motors_func(self):
         # pyqt threads
@@ -576,6 +624,7 @@ class MotorsControlsGroup(QGroupBox):
         if self.CT_motor is not None:
             if self.CT_motor.state in ["hard-limit", "moving"]:
                 self.CT_motor.stop().join()
+        self.CT_ena_disa_buttons(True)
 
 
 class EpicsMonitorFloat(QObject):
@@ -650,6 +699,8 @@ class MotionThread(QThread):
             final_pos = self.motor.position
             self.is_moving = True
             try:
+                # clumsy workaround to use the same methods
+                # to sleep (fake "timer" motor)
                 if not hasattr(self.motor, 'timer'):
                     if self.rel_position is None:
                         final_pos = self.position * self.motor.UNITS
@@ -670,6 +721,8 @@ class MotionThread(QThread):
 
     def abort(self):
         self.is_moving = False
+        # is this signal redundant?
+        self.motion_over_signal.emit(True)
         try:
             self.motor.abort()
             self.thread_running = False

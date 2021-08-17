@@ -97,6 +97,7 @@ class GUI(QDialog):
             title="Motor controls and indicators")
         self.camera_controls_group = CameraControlsGroup(
             self.viewer, title="Camera controls")
+
         self.camera_controls_group.camera_connected_signal.connect(
             self.on_camera_connected)
         self.ffc_controls_group = FFCSettingsGroup(
@@ -117,7 +118,6 @@ class GUI(QDialog):
         # dictionary with references to all connected physical devices and their labels
         self.motors = {}
         self.shutter = None
-
         # timer is created automatically in motorscontrolgroup constructor
         self.motors["Timer [sec]"] = self.motor_control_group.time_motor
         self.scan_controls_group.inner_loop_motor.addItem("Timer [sec]")
@@ -222,6 +222,7 @@ class GUI(QDialog):
             self.exit()
         else:
             self.file_writer_group.root_dir_entry.setText(self.login_parameters['expdir'])
+            self.camera_controls_group.last_dir = self.login_parameters['expdir']
             td = date.today()
             tdstr = "{}.{}.{}".format(td.year, td.month, td.day)
             logfname = os.path.join(self.login_parameters['expdir'],'exp-log-'+tdstr+'.log')
@@ -315,6 +316,8 @@ class GUI(QDialog):
         self.reco_settings_group.setEnabled(val)
 
     def get_outer_motor_grid(self):
+        self.scan_controls_group.get_outer_range()
+        self.scan_controls_group.get_inner_range()
         if self.scan_controls_group.outer_steps > 0:
             self.number_of_scans = self.scan_controls_group.outer_steps
             if self.scan_controls_group.outer_loop_endpoint:

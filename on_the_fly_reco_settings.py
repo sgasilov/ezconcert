@@ -167,6 +167,7 @@ class RecoSettingsGroup(QGroupBox):
         self.args.absorptivity = True
         self.args.fix_nan_and_inf = True
         if self.pr_swi:
+            self.args.absorptivity = False
             self.args.energy = self.energy
             self.args.pixel_size = self.pix_size
             self.args.propagation_distance = self.prop_dist, self.prop_dist
