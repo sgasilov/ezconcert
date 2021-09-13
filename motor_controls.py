@@ -689,6 +689,7 @@ class MotionThread(QThread):
         self.rel_position = rel_position
         self.direction = direction
         self.is_moving = False
+        #self.log = None
 
     def stop(self):
         self.thread_running = False
@@ -715,7 +716,7 @@ class MotionThread(QThread):
                 self.motion_over_signal.emit(True)
                 self.thread_running = False
             except TransitionNotAllowed:
-                error_message("Stage is moving. Wait until motion has stopped.")
+                #error_message("Stage is moving. Wait until motion has stopped.")
                 self.is_moving = False
                 self.thread_running = False
 
@@ -747,7 +748,7 @@ class HomeThread(QThread):
                 self.motor.home().join()
                 self.thread_running = False
             except TransitionNotAllowed:
-                error_message("Stage is moving. Wait until motion has stopped.")
+                #error_message("Stage is moving. Wait until motion has stopped.")
                 self.thread_running = False
 
     def abort(self):

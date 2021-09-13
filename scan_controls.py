@@ -1,4 +1,3 @@
-from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, \
     QPushButton, QComboBox, QCheckBox
 
@@ -14,8 +13,6 @@ class ScanControlsGroup(QGroupBox):
                  scan_fps_entry,
                  motor_inner, motor_outer, *args, **kwargs):
         super(ScanControlsGroup, self).__init__(*args, **kwargs)
-        # Timer - just as example
-        self.timer = QTimer()
 
         # physical devices
         self.motor_inner = motor_inner

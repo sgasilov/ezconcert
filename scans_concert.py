@@ -6,7 +6,7 @@ import atexit
 from time import sleep
 from concert.quantities import q
 from concert.experiments.base import Acquisition, Experiment
-from PyQt5.QtCore import QTimer, QThread, pyqtSignal
+from PyQt5.QtCore import QThread, pyqtSignal
 from concert.experiments.addons import Consumer, ImageWriter, OnlineReconstruction
 from concert.ext.ufo import (GeneralBackprojectArgs, GeneralBackprojectManager)
 from message_dialog import info_message, error_message
@@ -131,7 +131,7 @@ class ConcertScanThread(QThread):
     def attach_online_reco(self):
         # Manager stores projections, can find axis and so on...
         if self.args is None:
-            error_message('Args for online reconstruction not set')
+            self.log.debug('Args for online reconstruction not set')
             return
         self.manager = GeneralBackprojectManager(self.args)
         # This is the addon
@@ -205,7 +205,6 @@ class ACQsetup(object):
         self.ttl_exp_time = None
         self.ttl_dead_time = None
 
-        self.timer = QTimer()
         self.glob_tmp = 0
 
     # HELPER FUNCTIONS
@@ -227,7 +226,7 @@ class ACQsetup(object):
             self.ffcsetup.close_shutter()
             sleep(1)  # to get rid of possible afterglow
         except:
-            info_message("Cannot close shutter in take_darks_softr")
+            self.log.debug("Cannot close shutter in take_darks_softr")
         try:
             if self.camera.state == "recording":
                 self.camera.stop_recording()
@@ -237,7 +236,7 @@ class ACQsetup(object):
             sleep(0.01)
         except Exception as exp:
             self.log.error(exp)
-            info_message(
+            self.log.error(
                 "Something is wrong with setting camera params for take_darks_softr"
             )
         try:
@@ -246,7 +245,7 @@ class ACQsetup(object):
                 yield self.camera.grab()
         except Exception as exp:
             self.log.error(exp)
-            info_message("Something is wrong in take_darks_softr")
+            self.log.error("Something is wrong in take_darks_softr")
         finally:
             self.camera.stop_recording()
             self.log.info("Acquired darks")
@@ -259,7 +258,7 @@ class ACQsetup(object):
             self.ffcsetup.open_shutter()
         except Exception as exp:
             self.log.error(exp)
-            info_message("Something is wrong in preparations for take_flats_softr")
+            self.log.error("Something is wrong in preparations for take_flats_softr")
         try:
             if self.camera.state == "recording":
                 self.camera.stop_recording()
@@ -268,7 +267,7 @@ class ACQsetup(object):
             sleep(0.01)
         except Exception as exp:
             self.log.error(exp)
-            info_message(
+            self.log.error(
                 "Something is wrong with setting camera params in take_flats_softr"
             )
         try:
@@ -277,7 +276,7 @@ class ACQsetup(object):
                 yield self.camera.grab()
         except Exception as exp:
             self.log.error(exp)
-            info_message("Something is wrong during acquisition of flats")
+            self.log.error("Something is wrong during acquisition of flats")
         finally:
             self.camera.stop_recording()
             self.ffcsetup.close_shutter()
@@ -302,7 +301,7 @@ class ACQsetup(object):
             sleep(0.01)
         except Exception as exp:
             self.log.error(exp)
-            info_message("Something is wrong in preparations for tomo_softr")
+            self.log.error("Something is wrong in preparations for tomo_softr")
         try:
             for pos in self.region:
                 # while True:
@@ -315,7 +314,7 @@ class ACQsetup(object):
                 #        break
         except Exception as exp:
             self.log.error(exp)
-            info_message("Something is wrong during tomo_softr")
+            self.log.error("Something is wrong during tomo_softr")
         try:
             self.ffcsetup.close_shutter()
             if self.camera.state == "recording":
@@ -326,7 +325,7 @@ class ACQsetup(object):
                 self.motor["stepvelocity"].set(5.0 * q.deg / q.sec).join()
         except Exception as exp:
             self.log.error(exp)
-            info_message("Something is wrong in final in tomo_softr")
+            self.log.error("Something is wrong in final in tomo_softr")
 
     def take_softr_timelaps(self):
 
@@ -387,13 +386,13 @@ class ACQsetup(object):
             self.log.error(exp)
             tmp = "Problem during recording/rotation in PSO scan"
             self.log.error(tmp)
-            error_message(tmp)
+            self.log.error(tmp)
         # read-out
         if self.camera.recorded_frames.magnitude < self.nsteps:
             tmp = "Number of recorded frames {:} less than expected {:}". \
                 format(self.camera.recorded_frames.magnitude, self.nsteps)
             self.log.error(tmp)
-            error_message(tmp)
+            self.log.error(tmp)
             return
         self.ffcsetup.close_shutter()
         self.return_ct_stage_to_start(block=False)
@@ -418,7 +417,7 @@ class ACQsetup(object):
             self.ffcsetup.open_shutter()
         except Exception as exp:
             self.log.error(exp)
-            error_message("Cannot open shutter")
+            self.log.error("Cannot open shutter")
         velocity = self.range * q.deg / (self.nsteps / self.camera.frame_rate)
         sleep_time = self.nsteps / float(self.camera.frame_rate.magnitude) * 1.05
         self.log.debug("time to sleep for scan: {}".format(sleep_time))
@@ -450,7 +449,7 @@ class ACQsetup(object):
             self.ffcsetup.open_shutter()
         except Exception as exp:
             self.log.error(exp)
-            error_message("Cannot open shutter")
+            self.log.error("Cannot open shutter")
         if self.camera.buffered:
             self.camera.num_buffers = self.nsteps * 1.5
         self.motor["velocity"].set(velocity).join()
@@ -496,7 +495,7 @@ class ACQsetup(object):
             self.log.error(exp)
             tmp="Cannot set parameters of CT stage/PSO for ext trig scan"
             self.log.error(tmp)
-            error_message(tmp)
+            self.log.error(tmp)
 
     def return_ct_stage_to_start(self, block=True):
         #self.motor["state"].wait("standby", sleep_time=10, timeout=10)
@@ -516,7 +515,7 @@ class ACQsetup(object):
                 self.motor["position"].set(self.start * self.units)
         except Exception as exp:
             self.log.error(exp)
-            error_message(
+            self.log.error(
                 "can't return CT stage to start position after on-the-fly scan"
             )
 
@@ -530,7 +529,7 @@ class ACQsetup(object):
         total_time = self.exp_time + self.dead_time
         if total_time < 1.0:
             mesg = "Time is too short for TTL pulses: {} < 1 ms".format(total_time)
-            error_message(mesg)
+            self.log.error(mesg)
             self.log.error(mesg)
             return
         try:
@@ -567,7 +566,7 @@ class ACQsetup(object):
                 vel = self.motor.calc_vel(self.nsteps, total_time, self.range)
                 if vel.magnitude > 390.0:
                     mesg = "Velocity is too high: {} > 390 deg/s".format(vel)
-                    error_message(mesg)
+                    self.log.error(mesg)
                     self.log.error(mesg)
                     return
                 self.motor["stepvelocity"].set(vel).join()

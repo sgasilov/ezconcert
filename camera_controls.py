@@ -2,7 +2,7 @@ import atexit
 from random import choice
 import time
 
-from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject, QTimer
+from PyQt5.QtCore import QThread, pyqtSignal, QObject, Qt
 from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, \
     QPushButton, QComboBox, QFileDialog, QCheckBox
 
@@ -24,11 +24,6 @@ from time import sleep
 import os
 
 
-# class Camera:
-#     def __init__(self, name):
-#         #if name != 'bar':
-#         self.name = name
-
 class CameraControlsGroup(QGroupBox):
     """
     Camera controls
@@ -38,7 +33,6 @@ class CameraControlsGroup(QGroupBox):
     def __init__(self, viewer, *args, **kwargs):
         # Timer - just as example
         super(CameraControlsGroup, self).__init__(*args, **kwargs)
-        self.timer = QTimer()
         self.camera = None
         self.log = None
         #self.plugin_names = ['pco', 'pcoclhs']
@@ -63,6 +57,10 @@ class CameraControlsGroup(QGroupBox):
         self.lv_stream2disk_on = False
         self.cons_viewer = None
         self.cons_writer = None
+        self.bigtiff = QCheckBox("Use bigtiff")
+        self.bigtiff.setChecked(True)
+        self.bpf = 2**37
+        #self.bigtiff.stateChanged.connect(self.switch_bigtiff)
 
         self.live_off_button = QPushButton("LIVE OFF")
         self.live_off_button.setEnabled(False)
@@ -270,6 +268,8 @@ class CameraControlsGroup(QGroupBox):
         #layout.addWidget(self.camera_model_label, 1, 2)
         #layout.addWidget(self.connect_to_dummy_camera_button, 1, 2)
         layout.addWidget(self.ttl_scan, 1, 2)
+        #layout.addWidget(self.bigtiff, 1, 3, Qt.AlignRight)
+
         layout.addWidget(self.save_lv_sequence_button, 1, 4)
         layout.addWidget(self.abort_transfer_button, 1, 5)
 
@@ -554,8 +554,7 @@ class CameraControlsGroup(QGroupBox):
             self, 'Select directory', self.last_dir)
         self.lv_dirwalker = DirectoryWalker(root=os.path.dirname(self.stream_dir),
                                             dsetname="frames_{:>02}.tif",
-                                            bytes_per_file=2**37)
-                                            #bytes_per_file=0)
+                                            bytes_per_file=self.bpf)
         self.lv_acquisitions = [Acquisition("Radios", self.acq_lv_stream2disk)]
         self.lv_experiment = Experiment(
             acquisitions=self.lv_acquisitions,
@@ -580,6 +579,7 @@ class CameraControlsGroup(QGroupBox):
             error_message("Select AUTO or EXTERNAL trigger in order to stream to disk")
             self.camera.trigger_source = self.camera.trigger_sources.AUTO
         self.set_camera_params(buff=False)
+        #self.live_on_button_stream2disk.setEnabled(True)
 
     def acq_lv_stream2disk(self):
         self.log.info("Inside the acquisition which streams to disk")
@@ -591,8 +591,8 @@ class CameraControlsGroup(QGroupBox):
             self.log.error(exp)
 
     def live_on_func_stream2disk(self):
-        if self.stream_dir == None:
-            error_message("Select the filename first")
+        if self.stream_dir == None or self.lv_experiment is None:
+            error_message("Select the directory first")
             return
         self.ena_disa_buttons(False)
         self.lv_stream2disk_on = True
@@ -609,6 +609,7 @@ class CameraControlsGroup(QGroupBox):
             self.log.debug("Aborted and deleted concert experiment")
         except:
             self.log.debug("Cannot abort and delete concert experiment")
+        #self.live_on_button_stream2disk.setEnabled(False)
 
     def live_off_func(self):
         self.log.info("Live off func called")
@@ -644,12 +645,15 @@ class CameraControlsGroup(QGroupBox):
         # Get file name
         f, fext = self.QFD.getSaveFileName(
             self, 'Select dir and enter prefix', self.last_dir, "Image Files (*.tif)")
-        if f == self.last_dir:
-            f += "/im-seq-00"
+        #if f == self.last_dir:
+        #    f += "/im-seq-00"
         self.last_dir = os.path.dirname(f)
-
+        # setup Filewriter in readout thread
+        if self.bpf > 0:
+            self.readout_thread.filename = f + '.tif'
+        else:
+            self.readout_thread.filename = f + '{-:>04}.tif'
         # Start readout
-        self.readout_thread.filename = f + '.tif'
         self.readout_thread.readout_on = True
 
 
@@ -658,9 +662,11 @@ class CameraControlsGroup(QGroupBox):
         self.readout_thread.abort_transfer = True
         self.abort_transfer_button.setEnabled(False)
 
-    def readout_over_func(self, val):
-        self.live_on_button.setEnabled(val)
-        self.save_one_image_button.setEnabled(val)
+    def readout_over_func(self, frames_grabbed, time_s):
+        info_message("Saved {0} images in {1} sec".
+                     format(frames_grabbed, time_s))
+        self.live_on_button.setEnabled(True)
+        self.save_one_image_button.setEnabled(True)
         self.abort_transfer_button.setEnabled(False)
 
     def save_one_image(self):
@@ -754,6 +760,7 @@ class CameraControlsGroup(QGroupBox):
             self.trigger_entry.setEnabled(val)
         self.sensor_hor_bin_entry.setEnabled(val)
         self.time_stamp.setEnabled(val)
+        self.bigtiff.setEnabled(val)
 
     # getters/setters
     @property
@@ -995,6 +1002,12 @@ class CameraControlsGroup(QGroupBox):
             self.live_off_button.setEnabled(True)
             self.save_one_image_button.setEnabled(True)
 
+    def switch_bigtiff(self):
+        if self.bigtiff.isChecked():
+            self.bpf = 2**37
+        else:
+            self.bpf = 0
+        self.readout_thread.bpf = self.bpf
 
 class LivePreviewThread(QThread):
     def __init__(self, viewer, camera):
@@ -1019,7 +1032,7 @@ class LivePreviewThread(QThread):
 
 
 class ReadoutThread(QThread):
-    readout_over_signal = pyqtSignal(bool)
+    readout_over_signal = pyqtSignal(int, int)
     def __init__(self, camera):
         super(ReadoutThread, self).__init__()
         self.camera = camera
@@ -1030,6 +1043,7 @@ class ReadoutThread(QThread):
         self.frames_grabbed_so_far = 0
         self.filename = None
         atexit.register(self.stop)
+        self.bpf = 2**37
 
     def stop(self):
         self.thread_running = False
@@ -1039,11 +1053,13 @@ class ReadoutThread(QThread):
         while self.thread_running:
             if self.readout_on:
                 self.frames_grabbed_so_far = 0
+                tot_frames = self.camera.recorded_frames.magnitude-1
                 tmp = time.time()
                 self.abort_transfer = False
                 self.camera.uca.start_readout()
-                wrtr = TiffWriter(self.filename, bytes_per_file=2 ** 37)
-                while not self.abort_transfer:
+                wrtr = TiffWriter(self.filename, bytes_per_file=self.bpf)
+                while not self.abort_transfer and \
+                        self.frames_grabbed_so_far < tot_frames:
                     try:
                         wrtr.write(self.camera.grab())
                         self.frames_grabbed_so_far += 1
@@ -1052,10 +1068,7 @@ class ReadoutThread(QThread):
                         self.abort_transfer = True
                 self.camera.uca.stop_readout()
                 wrtr.close()
-                self.readout_over_signal.emit(True)
-                info_message("Saved {0} images in {1} sec".
-                             format(self.frames_grabbed_so_far, int(time.time() - tmp)))
+                self.readout_over_signal.emit(self.frames_grabbed_so_far, int(time.time() - tmp))
                 self.readout_on = False
-                time.sleep(0.05)
             else:
                 time.sleep(1)

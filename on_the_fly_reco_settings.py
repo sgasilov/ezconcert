@@ -1,6 +1,5 @@
-from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, \
-    QPushButton, QComboBox, QCheckBox, QFileDialog
+    QPushButton, QCheckBox, QFileDialog
 from concert.ext.ufo import (GeneralBackprojectArgs, GeneralBackprojectManager)
 from concert.storage import read_tiff
 import os

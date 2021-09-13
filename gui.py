@@ -135,8 +135,11 @@ class GUI(QDialog):
         self.outer_unit = q.mm
 
         # various timers
-        self.gui_timer = QTimer()
+        self.scan_timer = QTimer()
         # timer to show total exp time so far
+        self.time_elapsed = QTimer()
+        self.time_elapsed.timeout.connect(self.update_elapsed_time)
+        self.start_time_elapsed = 0
         self.total_experiment_time = 0
 
         # SIGNALS/CONNECTIONS
@@ -168,7 +171,7 @@ class GUI(QDialog):
         self.button_log_file.clicked.connect(self.select_log_file_func)
         self.spacer = QLabel()
         self.spacer.setFixedWidth(100)
-        self.time_elapsed = QTimer()
+
         self.time_elapsed_label = QLabel()
         self.time_elapsed_label.setText("Time elapsed [sec]")
         self.time_elapsed_entry = QLabel()
@@ -202,8 +205,8 @@ class GUI(QDialog):
 
     def lv_timer_func(self):
         self.time_elapsed_entry.setText('0.0')
+        self.start_time_elapsed = time.time()
         self.time_elapsed.start(500)
-        self.time_elapsed.timeout.connect(self.update_elapsed_time)
 
     def lv_timer_stop_func(self):
         self.time_elapsed.stop()
@@ -359,20 +362,18 @@ class GUI(QDialog):
         if self.camera_controls_group.live_on or \
                 self.camera_controls_group.lv_stream2disk_on:
             self.camera_controls_group.live_off_func()
-        self.time_elapsed_entry.setText('0.0')
-        self.time_elapsed.start(500)
-        self.time_elapsed.timeout.connect(self.update_elapsed_time)
+        self.lv_timer_func()
         if self.scan_controls_group.delay_time == 0:
             self.start_real()
         elif self.scan_controls_group.delay_time > 0:
             self.log.info("*** Delayed start")
             self.scan_controls_group.setTitle("Scan controls. Status: waiting for delayed start")
-            self.gui_timer.singleShot(self.scan_controls_group.delay_time*60000, self.start_real)
+            self.scan_timer.singleShot(self.scan_controls_group.delay_time*60000, self.start_real)
         else:
             self.abort()
 
     def update_elapsed_time(self):
-        self.time_elapsed_entry.setText(str(float(self.time_elapsed_entry.text())+0.5))
+        self.time_elapsed_entry.setText("{:0.1f}".format(time.time() - self.start_time_elapsed))
 
     def start_real(self):
         #self.check_data_overwrite()
@@ -465,7 +466,7 @@ class GUI(QDialog):
             if self.scan_controls_group.outer_motor == 'Timer [sec]':
                 self.log.info("DELAYING THE NEXT SCAN")
                 self.scan_controls_group.setTitle("Experiment is running; delaying the next scan")
-                self.gui_timer.singleShot((self.outer_region[1] - self.outer_region[0]) * 1000,
+                self.scan_timer.singleShot((self.outer_region[1] - self.outer_region[0]) * 1000,
                                   self.doscan)
             else:
                 self.log.info("MOVING TO THE NEXT OUTER MOTOR POINT")
@@ -479,7 +480,7 @@ class GUI(QDialog):
                 self.motor_control_group.motion_vert.motion_over_signal.connect(self.doscan)
         else: # all scans done, finish the experiment
             # This section runs only if scan was finished normally, not aborted
-            self.time_elapsed.stop()
+            self.lv_timer_stop_func()
             self.log.info("***** EXPERIMENT finished without errors ****")
             # End of section
             self.scan_controls_group.setTitle(
@@ -646,8 +647,8 @@ class GUI(QDialog):
 
     def abort(self):
         self.number_of_scans = 0
-        self.gui_timer.stop()
-        self.time_elapsed.stop()
+        self.scan_timer.stop()
+        self.lv_timer_stop_func()
         self.concert_scan.abort_scan()
         self.motor_control_group.stop_motors_func()
         self.motor_control_group.close_shutter_func()

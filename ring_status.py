@@ -2,8 +2,8 @@ import atexit
 from random import choice
 from time import sleep
 
-from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject
-from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QLineEdit, QPushButton, QComboBox, QCheckBox
+from PyQt5.QtCore import pyqtSignal, QObject
+from PyQt5.QtWidgets import QGridLayout, QLabel, QGroupBox, QCheckBox
 
 from epics import PV
 from message_dialog import info_message
@@ -17,7 +17,6 @@ class RingStatusGroup(QGroupBox):
     def __init__(self, *args, **kwargs):
         # Timer - just as example
         super(RingStatusGroup, self).__init__(*args, **kwargs)
-        self.timer = QTimer()
 
         # Ring current
         self.ringcurrent_label = QLabel()
