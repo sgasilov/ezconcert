@@ -56,6 +56,7 @@ class ScanControlsGroup(QGroupBox):
         self.outer_loop_range_entry.setText('0')
         self.outer_loop_step_size_entry = QLineEdit()
         self.outer_loop_step_size_entry.setText('0')
+        self.outer_loop_step_size_entry.setEnabled(False)
         self.outer_loop_endpoint = QCheckBox("Include")
         self.outer_loop_endpoint.setChecked(True)
         self.outer_loop_flats_1 = QCheckBox("After")
@@ -76,7 +77,9 @@ class ScanControlsGroup(QGroupBox):
         self.inner_loop_range_entry = QLineEdit()
         self.inner_loop_range_entry.setText("180")
         self.inner_loop_step_size_entry = QLineEdit()
-        self.inner_loop_step_size_entry.setText("0.18")
+        self.inner_loop_step_size_entry.setText\
+            ("0.18")
+        self.inner_loop_step_size_entry.setEnabled(False)
         self.inner_loop_endpoint = QCheckBox("Include")
         self.inner_loop_flats_1 = QCheckBox("After")
         self.inner_loop_continuous = QCheckBox("On-the-fly")
@@ -100,10 +103,10 @@ class ScanControlsGroup(QGroupBox):
         #signals
         self.outer_loop_flats_0.stateChanged.connect(self.constrain_flats_before)
         self.outer_loop_flats_1.stateChanged.connect(self.constrain_flats_after)
-        self.inner_loop_step_size_entry.editingFinished.connect(self.get_inner_range)
+        #self.inner_loop_step_size_entry.editingFinished.connect(self.get_inner_range)
         self.inner_loop_range_entry.editingFinished.connect(self.get_inner_step_size)
         self.outer_loop_range_entry.editingFinished.connect(self.get_outer_step_size)
-        self.outer_loop_step_size_entry.editingFinished.connect(self.get_outer_range)
+        #self.outer_loop_step_size_entry.editingFinished.connect(self.get_outer_range)
         self.set_layout()
 
         #check input
